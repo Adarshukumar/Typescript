@@ -1,0 +1,52 @@
+name: Publish Package to npmjs
+on:
+  # keeping it purely manual for now as to not accidentally trigger a release
+  #release:
+  #  types: [published]
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package'
+        required: true
+        type: choice
+        options:
+          - '@reduxjs/toolkit'
+          - '@rtk-query/codegen-openapi'
+          - '@rtk-query/graphql-request-base-query'
+          - '@reduxjs/rtk-codemods'
+      tag:
+        description: 'NPM dist-tag (latest, alpha, beta, next)'
+        required: true
+        default: 'latest'
+        type: choice
+        options:
+          - latest
+          - next
+          - alpha
+          - beta
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # pnpm/setup has to run before setup-node, or setup-node's
+      # `cache: 'pnpm'` cannot find the pnpm store to cache.
+      - uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter ${{ inputs.package }} test
+      - run: pnpm --filter ${{ inputs.package }} exec npm publish --access public --provenance --tag ${{ inputs.tag }}

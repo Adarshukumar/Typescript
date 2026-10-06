@@ -1,0 +1,36 @@
+{
+  "name": "tanstack-svelte-table-example-realtime-trading",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "lint": "eslint ./src",
+    "test:types": "svelte-check --tsconfig ./tsconfig.json",
+    "test:e2e": "PLAYWRIGHT_TEST_DIR=$PWD/tests/e2e playwright test --config ../../../playwright.config.ts"
+  },
+  "nx": {
+    "targets": {
+      "test:e2e": {
+        "parallelism": false
+      }
+    }
+  },
+  "dependencies": {
+    "@tanstack/store": "^0.11.2",
+    "@tanstack/svelte-store": "^0.12.2",
+    "@tanstack/svelte-table": "^9.2.6",
+    "@tanstack/svelte-virtual": "^3.13.39",
+    "svelte": "^5.57.1"
+  },
+  "devDependencies": {
+    "@rolldown/binding-wasm32-wasi": "~1.2.12",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tsconfig/svelte": "^5.0.8",
+    "svelte-check": "^4.7.6",
+    "typescript": "6.0.3",
+    "vite": "^8.3.2"
+  }
+}

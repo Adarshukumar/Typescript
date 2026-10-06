@@ -1,0 +1,76 @@
+import { ServiceClassInstance } from "dioc"
+import { Ref } from "vue"
+import { HoppModule } from "~/modules"
+import { AnalyticsPlatformDef } from "./analytics"
+import { AuthPlatformDef } from "./auth"
+import { ExperimentsPlatformDef } from "./experiments"
+import { InfraPlatformDef } from "./infra"
+import { InspectorsPlatformDef } from "./inspectors"
+import { KernelInterceptorsPlatformDef } from "./kernel-interceptors"
+import { LimitsPlatformDef } from "./limits"
+import { SpotlightPlatformDef } from "./spotlight"
+import { UIPlatformDef } from "./ui"
+import { BackendPlatformDef } from "./backend"
+import { OrganizationPlatformDef } from "./organization"
+import { KernelIO } from "./kernel-io"
+import { AdditionalLinksPlatformDef } from "./additionalLinks"
+import { InstancePlatformDef } from "./instance"
+import { SyncPlatformDef } from "./sync"
+
+export type PlatformDef = {
+  ui?: UIPlatformDef
+  addedHoppModules?: HoppModule[]
+  addedServices?: Array<ServiceClassInstance<unknown>>
+  auth: AuthPlatformDef
+  analytics?: AnalyticsPlatformDef
+  kernelIO: KernelIO
+  instance: InstancePlatformDef
+  kernelInterceptors: KernelInterceptorsPlatformDef
+  additionalInspectors?: InspectorsPlatformDef
+  spotlight?: SpotlightPlatformDef
+  platformFeatureFlags: {
+    exportAsGIST: boolean
+    hasTelemetry: boolean
+
+    /**
+     *  Whether the platform supports cookies (affects whether the cookies footer item is shown)
+     *  If a value is not given, then the value is assumed to be false
+     */
+    cookiesEnabled?: boolean
+
+    /**
+     * Whether the platform should prompt the user that cookies are being used.
+     * This will result in the user being notified a cookies advisory and is meant for web apps.
+     *
+     * If a value is not given, then the value is assumed to be true
+     */
+    promptAsUsingCookies?: boolean
+
+    /**
+     * Whether to show the A/B testing workspace switcher click login flow or not
+     */
+    workspaceSwitcherLogin?: Ref<boolean>
+
+    /**
+     * Whether the platform uses cookie-based authentication.
+     * This affects CSRF security warnings for same-origin fetch calls in scripts.
+     * Self-hosted web instances use cookies, while cloud/desktop use bearer tokens.
+     *
+     * If not provided, defaults to false (no cookie-based auth).
+     */
+    hasCookieBasedAuth?: boolean
+  }
+  limits?: LimitsPlatformDef
+  infra?: InfraPlatformDef
+  experiments?: ExperimentsPlatformDef
+  backend: BackendPlatformDef
+  organization?: OrganizationPlatformDef
+  additionalLinks?: AdditionalLinksPlatformDef
+  sync?: SyncPlatformDef
+}
+
+export let platform: PlatformDef
+
+export function setPlatformDef(def: PlatformDef) {
+  platform = def
+}

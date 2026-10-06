@@ -1,0 +1,90 @@
+{ pkgs, lib, config, inputs, ... }:
+
+let
+  rosettaPkgs =
+    if pkgs.stdenv.isDarwin && pkgs.stdenv.isAarch64
+    then pkgs.pkgsx86_64Darwin
+    else pkgs;
+
+  darwinPackages = with pkgs; [
+    # Unified apple-sdk replaces the per-framework
+    # darwin.apple_sdk.frameworks.* entries that were removed during the
+    # nixpkgs Darwin SDK migration. The default unversioned SDK bundles
+    # Security, CoreServices, CoreFoundation, Foundation, AppKit, and
+    # WebKit, which is what this shell consumed before.
+    apple-sdk
+  ];
+
+  linuxPackages = with pkgs; [
+    libsoup_3
+    webkitgtk_4_1
+    librsvg
+    libappindicator
+    libayatana-appindicator
+  ];
+
+in {
+  packages = with pkgs; [
+    git
+    nodejs_22
+    typescript-language-server
+    vue-language-server
+    cargo-edit
+  ] ++ lib.optionals pkgs.stdenv.isDarwin darwinPackages
+    ++ lib.optionals pkgs.stdenv.isLinux linuxPackages;
+
+  env = {
+    APP_GREET = "Hi!";
+  } // lib.optionalAttrs pkgs.stdenv.isLinux {
+    LD_LIBRARY_PATH = lib.makeLibraryPath [
+      pkgs.libappindicator
+      pkgs.libayatana-appindicator
+    ];
+  } // lib.optionalAttrs pkgs.stdenv.isDarwin {
+    # Place to put macOS-specific environment variables
+  };
+
+  scripts = {
+    hello.exec = "echo hello from $APP_GREET";
+    e.exec = "emacs";
+  };
+
+  enterShell = ''
+    git --version
+    ${lib.optionalString pkgs.stdenv.isDarwin ''
+      # Place to put macOS-specific shell initialization
+    ''}
+    ${lib.optionalString pkgs.stdenv.isLinux ''
+      # Place to put Linux-specific shell initialization
+    ''}
+  '';
+
+  enterTest = ''
+    echo "Running tests"
+  '';
+
+  dotenv.enable = true;
+
+  languages = {
+    typescript.enable = true;
+    javascript = {
+      enable = true;
+      pnpm.enable = true;
+      npm.enable = true;
+    };
+    rust = {
+      enable = true;
+      channel = "nightly";
+      components = [
+        "rustc"
+        "cargo"
+        "clippy"
+        "rustfmt"
+        "rust-analyzer"
+        "llvm-tools-preview"
+        "rust-src"
+        "rustc-codegen-cranelift-preview"
+      ];
+    };
+  };
+}

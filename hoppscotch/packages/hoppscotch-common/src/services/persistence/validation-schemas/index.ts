@@ -1,0 +1,808 @@
+import {
+  Environment,
+  GQLHeader,
+  HoppGQLAuth,
+  HoppGQLRequest,
+  HoppGQLRequestResponse,
+  HoppRESTAuth,
+  HoppRESTRequest,
+  HoppRESTHeaders,
+  HoppRESTRequestResponse,
+  HoppCollection,
+  GlobalEnvironment,
+  CollectionVariable,
+} from "@hoppscotch/data"
+import { entityReference } from "verzod"
+import { z } from "zod"
+import { HoppAccentColors, HoppBgColors } from "~/newstore/settings"
+
+const ThemeColorSchema = z.enum([
+  "green",
+  "teal",
+  "blue",
+  "indigo",
+  "purple",
+  "yellow",
+  "orange",
+  "red",
+  "pink",
+])
+
+const BgColorSchema = z.enum(["system", "light", "dark", "black"])
+
+const EncodeMode = z.enum(["enable", "disable", "auto"])
+
+const SettingsDefSchema = z.object({
+  syncCollections: z.boolean(),
+  syncHistory: z.boolean(),
+  syncEnvironments: z.boolean(),
+  PROXY_URL: z.string(),
+  CURRENT_KERNEL_INTERCEPTOR_ID: z.string(),
+  URL_EXCLUDES: z.object({
+    auth: z.boolean(),
+    httpUser: z.boolean(),
+    httpPassword: z.boolean(),
+    bearerToken: z.boolean(),
+    oauth2Token: z.optional(z.boolean()),
+  }),
+  THEME_COLOR: ThemeColorSchema,
+  BG_COLOR: BgColorSchema,
+  ENCODE_MODE: EncodeMode.catch("enable"),
+  TELEMETRY_ENABLED: z.boolean(),
+  EXPAND_NAVIGATION: z.boolean(),
+  SIDEBAR: z.boolean(),
+  SIDEBAR_ON_LEFT: z.boolean(),
+  COLUMN_LAYOUT: z.boolean(),
+
+  WRAP_LINES: z.optional(
+    z.object({
+      httpRequestBody: z.boolean().catch(true),
+      httpResponseBody: z.boolean().catch(true),
+      httpHeaders: z.boolean().catch(true),
+      httpParams: z.boolean().catch(true),
+      httpUrlEncoded: z.boolean().catch(true),
+      httpPreRequest: z.boolean().catch(true),
+      httpTest: z.boolean().catch(true),
+      httpRequestVariables: z.boolean().catch(true),
+      graphqlQuery: z.boolean().catch(true),
+      graphqlResponseBody: z.boolean().catch(true),
+      graphqlHeaders: z.boolean().catch(false),
+      graphqlVariables: z.boolean().catch(false),
+      graphqlSchema: z.boolean().catch(true),
+      importCurl: z.boolean().catch(true),
+      codeGen: z.boolean().catch(true),
+      cookie: z.boolean().catch(true),
+      multipartFormdata: z.boolean().catch(true),
+    })
+  ),
+
+  HAS_OPENED_SPOTLIGHT: z.optional(z.boolean()),
+  ENABLE_AI_EXPERIMENTS: z.optional(z.boolean()),
+  AI_REQUEST_NAMING_STYLE: z
+    .string()
+    .optional()
+    .catch("DESCRIPTIVE_WITH_SPACES"),
+  CUSTOM_NAMING_STYLE: z.string().optional().catch(""),
+
+  EXPERIMENTAL_SCRIPTING_SANDBOX: z.optional(z.boolean()),
+  ENABLE_EXPERIMENTAL_MOCK_SERVERS: z.optional(z.boolean()),
+  ENABLE_EXPERIMENTAL_DOCUMENTATION: z.optional(z.boolean()),
+  ENABLE_GQL_IN_REST_WORKSPACE: z.optional(z.boolean()),
+})
+
+const HoppRESTRequestSchema = entityReference(HoppRESTRequest)
+
+const HoppGQLRequestSchema = entityReference(HoppGQLRequest)
+
+/**
+ * A protocol-switcher draft: the snapshotted request plus the tab's dirty
+ * flag at snapshot time.
+ *
+ * Drafts written before dirty tracking existed were bare requests, so those
+ * are still accepted and normalized to `isDirty: true` — the behaviour they
+ * were written under. Without this, an in-flight draft from an older build
+ * would fail the tab-state schema on upgrade and take the whole persisted
+ * tab list down with it.
+ */
+const ProtocolDraftSchema = <T extends z.ZodTypeAny>(requestSchema: T) =>
+  z.union([
+    z.object({ request: requestSchema, isDirty: z.boolean() }),
+    requestSchema.transform((request: z.infer<T>) => ({
+      request,
+      isDirty: true,
+    })),
+  ])
+
+const HoppRESTCollectionSchema = entityReference(HoppCollection)
+
+const HoppGQLCollectionSchema = entityReference(HoppCollection)
+
+export const VUEX_SCHEMA = z.object({
+  postwoman: z.optional(
+    z.object({
+      settings: z.optional(SettingsDefSchema),
+      //! Versioned entities
+      collections: z.optional(z.array(HoppRESTCollectionSchema)),
+      collectionsGraphql: z.optional(z.array(HoppGQLCollectionSchema)),
+      environments: z.optional(z.array(entityReference(Environment))),
+    })
+  ),
+})
+
+export const THEME_COLOR_SCHEMA = z.enum(HoppAccentColors)
+
+export const NUXT_COLOR_MODE_SCHEMA = z.enum(HoppBgColors)
+
+export const LOCAL_STATE_SCHEMA = z.union([
+  z.object({}).strict(),
+  z
+    .object({
+      REMEMBERED_TEAM_ID: z.optional(z.string()),
+    })
+    .strict(),
+])
+
+export const SETTINGS_SCHEMA = SettingsDefSchema.extend({
+  EXTENSIONS_ENABLED: z.optional(z.boolean()),
+  PROXY_ENABLED: z.optional(z.boolean()),
+})
+
+export const REST_HISTORY_ENTRY_SCHEMA = z
+  .object({
+    v: z.number(),
+    //! Versioned entity
+    request: HoppRESTRequestSchema,
+    responseMeta: z
+      .union([
+        z.string().refine((val) => {
+          try {
+            const parsed = JSON.parse(val)
+            return (
+              typeof parsed === "object" &&
+              parsed !== null &&
+              (parsed.duration === undefined ||
+                parsed.duration === null ||
+                typeof parsed.duration === "number") &&
+              (parsed.statusCode === undefined ||
+                parsed.statusCode === null ||
+                typeof parsed.statusCode === "number")
+            )
+          } catch {
+            return false
+          }
+        }),
+        z
+          .object({
+            duration: z.nullable(z.number()),
+            statusCode: z.nullable(z.number()),
+          })
+          .strict(),
+      ])
+      .catch({ duration: null, statusCode: null }),
+    star: z.boolean(),
+    id: z.string().nullish(),
+    updatedOn: z.union([z.date(), z.string()]).nullish(),
+  })
+  .strict()
+
+export const GQL_HISTORY_ENTRY_SCHEMA = z
+  .object({
+    v: z.number(),
+    //! Versioned entity
+    request: HoppGQLRequestSchema,
+    response: z.string(),
+    star: z.boolean(),
+    id: z.string().nullish(),
+    updatedOn: z.union([z.date(), z.string()]).nullish(),
+  })
+  .strict()
+
+export const REST_COLLECTION_SCHEMA = HoppRESTCollectionSchema
+
+export const GQL_COLLECTION_SCHEMA = HoppGQLCollectionSchema
+
+export const ENVIRONMENTS_SCHEMA = z.array(entityReference(Environment))
+
+export const GLOBAL_ENVIRONMENT_SCHEMA = entityReference(GlobalEnvironment)
+
+export const SELECTED_ENV_INDEX_SCHEMA = z.nullable(
+  z.discriminatedUnion("type", [
+    z
+      .object({
+        type: z.literal("NO_ENV_SELECTED"),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("MY_ENV"),
+        index: z.number(),
+      })
+      .strict(),
+    z.object({
+      type: z.literal("TEAM_ENV"),
+      teamID: z.string(),
+      teamEnvID: z.string(),
+      environment: entityReference(Environment),
+    }),
+  ])
+)
+
+export const WEBSOCKET_REQUEST_SCHEMA = z.nullable(
+  z
+    .object({
+      endpoint: z.string(),
+      protocols: z.array(
+        z
+          .object({
+            value: z.string(),
+            active: z.boolean(),
+          })
+          .strict()
+      ),
+    })
+    .strict()
+)
+
+export const SOCKET_IO_REQUEST_SCHEMA = z.nullable(
+  z
+    .object({
+      endpoint: z.string(),
+      path: z.string(),
+      version: z.union([z.literal("v4"), z.literal("v3"), z.literal("v2")]),
+    })
+    .strict()
+)
+
+export const SSE_REQUEST_SCHEMA = z.nullable(
+  z
+    .object({
+      endpoint: z.string(),
+      eventType: z.string(),
+    })
+    .strict()
+)
+
+export const MQTT_REQUEST_SCHEMA = z.nullable(
+  z
+    .object({
+      endpoint: z.string(),
+      clientID: z.optional(z.string()),
+    })
+    .strict()
+)
+
+const EnvironmentVariablesSchema = z.union([
+  z.object({
+    key: z.string(),
+    initialValue: z.string(),
+    currentValue: z.string(),
+    secret: z.boolean(),
+  }),
+  z.object({
+    key: z.string(),
+    value: z.string(),
+  }),
+])
+
+const OperationTypeSchema = z.enum([
+  "subscription",
+  "query",
+  "mutation",
+  "teardown",
+])
+
+const RunQueryOptionsSchema = z
+  .object({
+    name: z.optional(z.string()),
+    url: z.string(),
+    headers: z.array(GQLHeader),
+    query: z.string(),
+    variables: z.string(),
+    auth: HoppGQLAuth,
+    operationName: z.optional(z.string()),
+    operationType: OperationTypeSchema,
+  })
+  .strict()
+
+const HoppGQLSaveContextSchema = z.nullable(
+  z.discriminatedUnion("originLocation", [
+    z
+      .object({
+        originLocation: z.literal("user-collection"),
+        folderPath: z.string(),
+        requestIndex: z.number(),
+      })
+      .strict(),
+    z
+      .object({
+        originLocation: z.literal("team-collection"),
+        requestID: z.string(),
+        teamID: z.optional(z.string()),
+        collectionID: z.optional(z.string()),
+      })
+      .strict(),
+  ])
+)
+
+const GQLResponseEventSchema = z.array(
+  z
+    .object({
+      time: z.number(),
+      operationName: z.optional(z.string()),
+      operationType: OperationTypeSchema,
+      data: z.string(),
+      rawQuery: z.optional(RunQueryOptionsSchema),
+    })
+    .strict()
+)
+
+const validGqlOperations = [
+  "query",
+  "headers",
+  "variables",
+  "authorization",
+  "preRequestScript",
+  "tests",
+] as const
+
+const HoppInheritedPropertySchema = z
+  .object({
+    auth: z.object({
+      parentID: z.string(),
+      parentName: z.string(),
+      inheritedAuth: z.union([HoppRESTAuth, HoppGQLAuth]),
+    }),
+    headers: z.array(
+      z.object({
+        parentID: z.string(),
+        parentName: z.string(),
+        inheritedHeader: z.union([HoppRESTHeaders, GQLHeader]),
+      })
+    ),
+    variables: z
+      .array(
+        z.object({
+          parentPath: z.optional(z.string()),
+          parentID: z.string(),
+          parentName: z.string(),
+          inheritedVariables: z.array(CollectionVariable),
+        })
+      )
+      .catch([]),
+    scripts: z
+      .array(
+        z.object({
+          parentID: z.string(),
+          parentName: z.string(),
+          preRequestScript: z.string(),
+          testScript: z.string(),
+        })
+      )
+      .catch([]),
+  })
+  .strict()
+
+export const GQL_TAB_STATE_SCHEMA = z
+  .object({
+    lastActiveTabID: z.string(),
+    orderedDocs: z.array(
+      z.object({
+        tabID: z.string(),
+        doc: z
+          .object({
+            // Versioned entity
+            request: entityReference(HoppGQLRequest),
+            isDirty: z.boolean(),
+            saveContext: z.optional(HoppGQLSaveContextSchema),
+            response: z.optional(z.nullable(GQLResponseEventSchema)),
+            responseTabPreference: z.optional(z.string()),
+            optionTabPreference: z.optional(z.enum(validGqlOperations)),
+            inheritedProperties: z.optional(HoppInheritedPropertySchema),
+            cursorPosition: z.optional(z.number()),
+          })
+          .strict(),
+      })
+    ),
+  })
+  .strict()
+
+const HoppTestExpectResultSchema = z
+  .object({
+    status: z.enum(["fail", "pass", "error"]),
+    message: z.string(),
+  })
+  .strict()
+
+// @ts-expect-error recursive schema
+const HoppTestDataSchema = z.lazy(() =>
+  z
+    .object({
+      description: z.string(),
+      expectResults: z.array(HoppTestExpectResultSchema),
+      tests: z.array(HoppTestDataSchema),
+    })
+    .strict()
+)
+
+export const SECRET_ENVIRONMENT_VARIABLE_SCHEMA = z.union([
+  z.object({}).strict(),
+
+  z.record(
+    z.string(),
+    z.array(
+      z
+        .object({
+          key: z.string(),
+          value: z.string(),
+          initialValue: z.string().optional().catch(""),
+          varIndex: z.number(),
+        })
+        .strict()
+    )
+  ),
+])
+
+export const CURRENT_ENVIRONMENT_VALUE_SCHEMA = z.union([
+  z.object({}).strict(),
+
+  z.record(
+    z.string(),
+    z.array(
+      z
+        .object({
+          key: z.string(),
+          currentValue: z.string(),
+          varIndex: z.number(),
+          isSecret: z.boolean().catch(false),
+        })
+        .strict()
+    )
+  ),
+])
+
+export const CURRENT_SORT_VALUES_SCHEMA = z.union([
+  z.object({}).strict(),
+
+  z.record(
+    z.string(),
+    z.object({
+      sortBy: z.enum(["name"]),
+      sortOrder: z.enum(["asc", "desc"]),
+    })
+  ),
+])
+
+const HoppTestResultSchema = z
+  .object({
+    tests: z.array(HoppTestDataSchema),
+    expectResults: z.array(HoppTestExpectResultSchema),
+    description: z.string(),
+    scriptError: z.boolean(),
+    envDiff: z
+      .object({
+        global: z
+          .object({
+            additions: z.array(EnvironmentVariablesSchema),
+            updations: z.array(
+              z.intersection(
+                EnvironmentVariablesSchema,
+                z.object({ previousValue: z.optional(z.string()) })
+              )
+            ),
+            deletions: z.array(EnvironmentVariablesSchema),
+          })
+          .strict(),
+        selected: z
+          .object({
+            additions: z.array(EnvironmentVariablesSchema),
+            updations: z.array(
+              z.intersection(
+                EnvironmentVariablesSchema,
+                z.object({ previousValue: z.optional(z.string()) })
+              )
+            ),
+            deletions: z.array(EnvironmentVariablesSchema),
+          })
+          .strict(),
+      })
+      .strict(),
+    consoleEntries: z.optional(z.array(z.record(z.string(), z.unknown()))),
+  })
+  .strict()
+
+const TestRunnerDatasetSchema = z
+  .object({
+    fileName: z.string(),
+    type: z.enum(["csv", "json"]),
+    rows: z.array(z.record(z.string(), z.string())),
+  })
+  .strict()
+
+const TestRunnerMetaSchema = z
+  .object({
+    totalRequests: z.number(),
+    completedRequests: z.number(),
+    totalTests: z.number(),
+    passedTests: z.number(),
+    failedTests: z.number(),
+    totalTime: z.number(),
+  })
+  .strict()
+
+const HoppRESTResponseHeaderSchema = z
+  .object({
+    key: z.string(),
+    value: z.string(),
+  })
+  .strict()
+
+const HoppRESTResponseSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("loading"),
+      // !Versioned entity
+      req: HoppRESTRequestSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("fail"),
+      headers: z.array(HoppRESTResponseHeaderSchema),
+      body: z.instanceof(ArrayBuffer),
+      statusCode: z.number(),
+      meta: z
+        .object({
+          responseSize: z.number(),
+          responseDuration: z.number(),
+        })
+        .strict(),
+      // !Versioned entity
+      req: HoppRESTRequestSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("network_fail"),
+      error: z.unknown(),
+      // !Versioned entity
+      req: HoppRESTRequestSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("script_fail"),
+      error: z.instanceof(Error),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("success"),
+      headers: z.array(HoppRESTResponseHeaderSchema),
+      body: z.instanceof(ArrayBuffer),
+      statusCode: z.number(),
+      meta: z
+        .object({
+          responseSize: z.number(),
+          responseDuration: z.number(),
+        })
+        .strict(),
+      // !Versioned entity
+      req: HoppRESTRequestSchema,
+    })
+    .strict(),
+])
+
+const HoppTabSaveContextSchema = z.nullable(
+  z.discriminatedUnion("originLocation", [
+    z
+      .object({
+        originLocation: z.literal("user-collection"),
+        folderPath: z.string(),
+        requestIndex: z.optional(z.number()),
+        exampleID: z.optional(z.string()),
+        requestRefID: z.optional(z.string()),
+      })
+      .strict(),
+    z
+      .object({
+        originLocation: z.literal("team-collection"),
+        requestID: z.string(),
+        teamID: z.optional(z.string()),
+        collectionID: z.optional(z.string()),
+        exampleID: z.optional(z.string()),
+        requestRefID: z.optional(z.string()),
+      })
+      .strict(),
+  ])
+)
+
+const validRestOperations = [
+  "params",
+  "bodyParams",
+  "headers",
+  "authorization",
+  "preRequestScript",
+  "tests",
+  "requestVariables",
+] as const
+
+// The runner-only result fields that live on a request inside a test-runner
+// result collection (`TestRunnerRequest`). All optional and lax — its only job
+// is to re-capture the fields `entityReference` strips during migration.
+const TestRunnerRequestResultFieldsSchema = z.object({
+  type: z.optional(z.literal("test-response")),
+  response: z.optional(z.nullable(HoppRESTResponseSchema)),
+  testResults: z.optional(z.nullable(HoppTestResultSchema)),
+  isLoading: z.optional(z.boolean()),
+  error: z.optional(z.string()),
+  renderResults: z.optional(z.boolean()),
+  passedTests: z.optional(z.number()),
+  failedTests: z.optional(z.number()),
+  runnerRequestID: z.optional(z.string()),
+})
+
+// Mirrors the collection's requests/folders tree, capturing only the runner
+// result fields on each request so it can be merged back onto the migrated
+// collection.
+const TestRunnerResultOverlaySchema: z.ZodType<unknown> = z.lazy(() =>
+  z.object({
+    requests: z.array(TestRunnerRequestResultFieldsSchema),
+    folders: z.array(TestRunnerResultOverlaySchema),
+  })
+)
+
+// A test-runner result collection: the version-migrated HoppCollection (via
+// entityReference, which strips runner fields) intersected with the overlay
+// that re-captures them. z.intersection element-wise-merges the two, so an
+// older-version persisted collection is still migrated AND the runner result
+// fields survive the round-trip.
+export const TestRunnerResultCollectionSchema = z.intersection(
+  HoppRESTCollectionSchema,
+  TestRunnerResultOverlaySchema
+)
+
+// Persisted per-tab GQL response events (unified workspace) — mirrors
+// `GQLResponseEvent` in gql-tab-connection.service. Passthrough keeps the
+// optional fields (`document`, `rawQuery`) without pinning their shapes;
+// the legacy `GQLResponseEventSchema` above can't be reused here — it is
+// `.strict()` and models neither the `type` discriminant nor error events.
+const GQLTabResponseEventSchema = z.union([
+  z
+    .object({
+      type: z.literal("response"),
+      time: z.number(),
+      operationName: z.optional(z.string()),
+      operationType: OperationTypeSchema,
+      data: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal("error"),
+      error: z.object({ type: z.string(), message: z.string() }).passthrough(),
+    })
+    .passthrough(),
+])
+
+export const WORKSPACE_TABS_STATE_SCHEMA = z
+  .object({
+    lastActiveTabID: z.string(),
+    orderedDocs: z.array(
+      z.object({
+        tabID: z.string(),
+        // Opposite-protocol shadow drafts from the protocol switcher —
+        // modeled explicitly because safeParse strips unknown keys
+        protocolDrafts: z.optional(
+          z.object({
+            rest: z.optional(ProtocolDraftSchema(HoppRESTRequestSchema)),
+            gql: z.optional(ProtocolDraftSchema(HoppGQLRequestSchema)),
+          })
+        ),
+        doc: z.union([
+          z.object({
+            type: z.literal("test-runner").catch("test-runner"),
+            config: z.object({
+              delay: z.number(),
+              iterations: z.number(),
+              keepVariableValues: z.boolean(),
+              persistResponses: z.boolean(),
+              stopOnError: z.boolean(),
+              dataset: z.optional(TestRunnerDatasetSchema),
+            }),
+            status: z.enum(["idle", "running", "stopped", "error"]),
+            collection: HoppRESTCollectionSchema,
+            collectionType: z.enum(["my-collections", "team-collections"]),
+            collectionID: z.optional(z.string()),
+            resultCollection: z.optional(TestRunnerResultCollectionSchema),
+            iterationResults: z.optional(
+              z.array(
+                z
+                  .object({
+                    iteration: z.number(),
+                    // Current builds persist no iterations at all (see
+                    // `persistableTabState`); optional so states written by
+                    // earlier builds still validate — and when they carry
+                    // result trees, the runner fields survive the parse.
+                    resultCollection: z.optional(
+                      TestRunnerResultCollectionSchema
+                    ),
+                    meta: TestRunnerMetaSchema,
+                  })
+                  .strict()
+              )
+            ),
+            selectedIteration: z.optional(z.number()),
+            selectedRequestRefIds: z.optional(z.array(z.string())),
+            environmentName: z.optional(z.string()),
+            testRunnerMeta: TestRunnerMetaSchema,
+            request: z.nullable(
+              z.union([
+                entityReference(HoppRESTRequest),
+                entityReference(HoppGQLRequest),
+              ])
+            ),
+            response: z.nullable(HoppRESTResponseSchema),
+            testResults: z.optional(z.nullable(HoppTestResultSchema)),
+            isDirty: z.boolean(),
+            inheritedProperties: z.optional(HoppInheritedPropertySchema),
+          }),
+          z.object({
+            // !Versioned entity
+            request: entityReference(HoppRESTRequest),
+            type: z.literal("request").catch("request"),
+            isDirty: z.boolean(),
+            saveContext: z.optional(HoppTabSaveContextSchema),
+            response: z.optional(z.nullable(HoppRESTResponseSchema)),
+            testResults: z.optional(z.nullable(HoppTestResultSchema)),
+            responseTabPreference: z.optional(z.string()),
+            optionTabPreference: z.optional(z.enum(validRestOperations)),
+            inheritedProperties: z.optional(HoppInheritedPropertySchema),
+            cancelFunction: z.optional(z.function()),
+          }),
+          z.object({
+            type: z.literal("example-response").catch("example-response"),
+            response: entityReference(HoppRESTRequestResponse),
+            saveContext: z.optional(HoppTabSaveContextSchema),
+            isDirty: z.boolean(),
+            inheritedProperties: z.optional(HoppInheritedPropertySchema),
+          }),
+          z.object({
+            // No `.catch()` on the new GQL literals — nothing legacy coerces
+            // into them, and a `.catch()` lets a corrupt gql-request doc
+            // silently morph into an empty gql-example-response doc.
+            type: z.literal("gql-request"),
+            request: entityReference(HoppGQLRequest),
+            isDirty: z.boolean(),
+            cursorPosition: z.optional(z.number()),
+            saveContext: z.optional(HoppTabSaveContextSchema),
+            // Field-level catch: a corrupt persisted response degrades to an
+            // empty panel rather than failing the whole tabs-state parse
+            response: z
+              .optional(z.nullable(z.array(GQLTabResponseEventSchema)))
+              .catch(null),
+            responseTabPreference: z.optional(z.string()),
+            optionTabPreference: z.optional(
+              z.enum([
+                "query",
+                "headers",
+                "variables",
+                "authorization",
+                "preRequestScript",
+                "tests",
+              ])
+            ),
+            testResults: z.optional(z.nullable(HoppTestResultSchema)),
+            inheritedProperties: z.optional(HoppInheritedPropertySchema),
+          }),
+          z.object({
+            type: z.literal("gql-example-response"),
+            response: z.nullable(entityReference(HoppGQLRequestResponse)),
+            saveContext: z.optional(HoppTabSaveContextSchema),
+            isDirty: z.boolean(),
+            inheritedProperties: z.optional(HoppInheritedPropertySchema),
+          }),
+        ]),
+      })
+    ),
+  })
+  .strict()

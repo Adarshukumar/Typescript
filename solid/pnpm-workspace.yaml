@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+
+overrides:
+  babel-preset-solid: workspace:*
+  seroval: ~1.5.4
+  seroval-plugins: ~1.5.4

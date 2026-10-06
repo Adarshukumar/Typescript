@@ -1,0 +1,194 @@
+import React from 'react';
+import { render } from '@testing-library/react';
+
+import type { RibbonProps } from '..';
+import Badge from '..';
+import type { GetProp } from '../../_util/type';
+import mountTest from '../../../tests/shared/mountTest';
+import rtlTest from '../../../tests/shared/rtlTest';
+import ConfigProvider from '../../config-provider';
+import {
+  expectSemanticRootStylePriority,
+  semanticRootStylePriority,
+} from '../../../tests/shared/semanticStylePriority';
+
+describe('Ribbon', () => {
+  mountTest(Badge.Ribbon);
+  rtlTest(Badge.Ribbon);
+
+  it('should support nativeElement ref', () => {
+    const ref = React.createRef<React.ComponentRef<typeof Badge.Ribbon>>();
+    const { container } = render(
+      <Badge.Ribbon ref={ref} text="Ribbon">
+        <div />
+      </Badge.Ribbon>,
+    );
+
+    expect(ref.current?.nativeElement).toBe(container.querySelector('.ant-ribbon-wrapper'));
+  });
+
+  describe('placement', () => {
+    it('works with `start` & `end` placement', () => {
+      const { container: wrapperStart } = render(
+        <Badge.Ribbon placement="start">
+          <div />
+        </Badge.Ribbon>,
+      );
+      expect(wrapperStart.querySelectorAll('.ant-ribbon-placement-start').length).toBe(1);
+
+      const { container: wrapperEnd } = render(
+        <Badge.Ribbon placement="end">
+          <div />
+        </Badge.Ribbon>,
+      );
+      expect(wrapperEnd.querySelectorAll('.ant-ribbon-placement-end').length).toBe(1);
+    });
+  });
+
+  describe('color', () => {
+    it('works with preset color', () => {
+      const { container } = render(
+        <Badge.Ribbon color="green">
+          <div />
+        </Badge.Ribbon>,
+      );
+      expect(container.querySelectorAll('.ant-ribbon-color-green').length).toBe(1);
+    });
+    it('works with custom color', () => {
+      const { container, rerender } = render(
+        <Badge.Ribbon color="rgb(136, 136, 136)" placement="start">
+          <div />
+        </Badge.Ribbon>,
+      );
+      expect(container.querySelector<HTMLElement>('.ant-ribbon')).toHaveStyle({
+        backgroundColor: 'rgb(136, 136, 136)',
+      });
+      expect(container.querySelector<HTMLElement>('.ant-ribbon-corner')).toHaveStyle({
+        color: 'rgb(136, 136, 136)',
+      });
+      rerender(
+        <Badge.Ribbon color="rgb(136, 136, 136)" placement="end">
+          <div />
+        </Badge.Ribbon>,
+      );
+      expect(container.querySelector<HTMLElement>('.ant-ribbon')).toHaveStyle({
+        backgroundColor: 'rgb(136, 136, 136)',
+      });
+      expect(container.querySelector<HTMLElement>('.ant-ribbon-corner')).toHaveStyle({
+        color: 'rgb(136, 136, 136)',
+      });
+    });
+  });
+
+  describe('text', () => {
+    it('works with string', () => {
+      const { container } = render(
+        <Badge.Ribbon text="cool">
+          <div />
+        </Badge.Ribbon>,
+      );
+      expect(container.querySelector('.ant-ribbon')?.textContent).toBe('cool');
+    });
+    it('works with element', () => {
+      const { container } = render(
+        <Badge.Ribbon text={<span className="cool" />}>
+          <div />
+        </Badge.Ribbon>,
+      );
+      expect(container.querySelectorAll('.cool').length).toBe(1);
+    });
+  });
+  it('should apply custom styles to Badge.Ribbon', () => {
+    const customClassNames: Required<GetProp<RibbonProps, 'classNames', 'Return'>> = {
+      root: 'custom-root',
+      indicator: 'custom-indicator',
+      content: 'custom-content',
+    };
+
+    const customStyles: Required<GetProp<RibbonProps, 'styles', 'Return'>> = {
+      root: { color: 'rgb(255, 0, 0)' },
+      indicator: { color: 'rgb(0, 128, 0)' },
+      content: { color: 'rgb(255, 255, 0)' },
+    };
+
+    const { container } = render(
+      <Badge.Ribbon text="Hippies" color="pink" classNames={customClassNames} styles={customStyles}>
+        <div>and raises the spyglass.</div>
+      </Badge.Ribbon>,
+    );
+
+    const rootElement = container.querySelector<HTMLElement>('.ant-ribbon-wrapper');
+    const indicatorElement = container.querySelector<HTMLElement>('.ant-ribbon');
+    const contentElement = container.querySelector<HTMLElement>('.ant-ribbon-content');
+
+    // check classNames
+    expect(rootElement).toHaveClass(customClassNames.root);
+    expect(indicatorElement).toHaveClass(customClassNames.indicator);
+    expect(contentElement).toHaveClass(customClassNames.content);
+
+    // check styles
+    expect(rootElement).toHaveStyle({ color: customStyles.root.color });
+    expect(indicatorElement).toHaveStyle({ color: customStyles.indicator.color });
+    expect(contentElement).toHaveStyle({ color: customStyles.content.color });
+  });
+
+  it('should support function-based classNames and styles', () => {
+    const { container } = render(
+      <Badge.Ribbon
+        text="Test"
+        color="blue"
+        placement="start"
+        classNames={({ props }) => ({
+          root: `ribbon-${props.placement}`,
+          indicator: 'ribbon-indicator',
+          content: 'ribbon-content',
+        })}
+        styles={({ props }) => ({
+          root: {
+            border:
+              props.placement === 'start' ? '1px solid rgb(255, 0, 0)' : '1px solid rgb(0, 0, 255)',
+          },
+          indicator: { opacity: '0.8' },
+          content: { fontWeight: 'bold' },
+        })}
+      >
+        <div>Test content</div>
+      </Badge.Ribbon>,
+    );
+
+    const rootElement = container.querySelector<HTMLElement>('.ant-ribbon-wrapper');
+    const indicatorElement = container.querySelector<HTMLElement>('.ant-ribbon');
+    const contentElement = container.querySelector<HTMLElement>('.ant-ribbon-content');
+
+    // check function-based classNames
+    expect(rootElement).toHaveClass('ribbon-start');
+    expect(indicatorElement).toHaveClass('ribbon-indicator');
+    expect(contentElement).toHaveClass('ribbon-content');
+
+    // check function-based styles
+    expect(rootElement).toHaveStyle({ border: '1px solid rgb(255, 0, 0)' });
+    expect(indicatorElement).toHaveStyle({ opacity: '0.8' });
+    expect(contentElement).toHaveProperty('style.fontWeight', 'bold');
+  });
+
+  it('should follow ribbon style priority', () => {
+    const { container } = render(
+      <ConfigProvider
+        ribbon={{
+          styles: { indicator: semanticRootStylePriority.contextStyles.root },
+          style: semanticRootStylePriority.contextStyle,
+        }}
+      >
+        <Badge.Ribbon
+          text="Test"
+          styles={{ indicator: semanticRootStylePriority.styles.root }}
+          style={semanticRootStylePriority.style}
+        >
+          <div>Test content</div>
+        </Badge.Ribbon>
+      </ConfigProvider>,
+    );
+
+    expectSemanticRootStylePriority(container.querySelector('.ant-ribbon'));
+  });
+});

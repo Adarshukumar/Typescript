@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "after:bump": "pnpm i && git add -u"
+  },
+  "git": {
+    "commitMessage": "Release @rtk-query/codegen-openapi ${version}",
+    "tagName": "@rtk-query/codegen-openapi@${version}"
+  },
+  "npm": {
+    "publish": false,
+    "versionArgs": ["--workspaces-update=false"]
+  }
+}

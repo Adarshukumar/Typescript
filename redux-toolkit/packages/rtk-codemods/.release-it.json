@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "after:bump": "pnpm i && git add -u"
+  },
+  "git": {
+    "commitMessage": "Release @reduxjs/rtk-codemods ${version}",
+    "tagName": "@reduxjs/rtk-codemods@${version}"
+  },
+  "npm": {
+    "publish": false
+  }
+}

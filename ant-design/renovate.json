@@ -1,0 +1,36 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "automerge": false,
+  "dependencyDashboard": true,
+  "rebaseWhen": "conflicted",
+  "ignoreDeps": [],
+  "labels": ["dependencies"],
+  "postUpdateOptions": ["yarnDedupeHighest"],
+  "prConcurrentLimit": 30,
+  "prHourlyLimit": 0,
+  "schedule": "on sunday before 6:00am",
+  "timezone": "UTC",
+  "packageRules": [
+    {
+      "groupName": "self-maintained",
+      "matchPackageNames": ["@rc-component/*", "rc-*", "@ant-design/*"],
+      "enabled": false
+    },
+    // https://github.com/ant-design/ant-design/pull/57888
+    {
+      "groupName": "jest dependencies",
+      "matchPackageNames": [
+        "jest",
+        "jest-*",
+        "@types/jest*",
+        "@testing-library/jest-dom",
+        "eslint-plugin-jest"
+      ]
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["actions/upload-artifact", "dawidd6/action-download-artifact"],
+      "enabled": false
+    }
+  ]
+}

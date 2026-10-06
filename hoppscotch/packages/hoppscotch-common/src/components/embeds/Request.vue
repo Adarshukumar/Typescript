@@ -1,0 +1,203 @@
+<template>
+  <div class="sticky top-0 z-10">
+    <div
+      class="flex-none flex-shrink-0 p-4 bg-primary sm:flex sm:flex-shrink-0 sm:space-x-2"
+    >
+      <div
+        class="flex flex-1 overflow-hidden border divide-x rounded text-secondaryDark divide-divider min-w-[12rem] overflow-x-auto border-divider"
+      >
+        <span
+          class="flex items-center justify-center px-4 py-2 font-semibold transition rounded-l"
+        >
+          {{ tab.document.request.method }}
+        </span>
+        <div
+          class="flex items-center flex-1 flex-shrink-0 min-w-0 truncate rounded-r"
+        >
+          <SmartEnvInput
+            v-model="tab.document.request.endpoint"
+            :readonly="true"
+            :envs="tabRequestVariables"
+          />
+        </div>
+      </div>
+      <div class="flex mt-2 space-x-2 sm:mt-0">
+        <HoppButtonPrimary
+          id="send"
+          :title="`${t(
+            'action.send'
+          )} <kbd>${getSpecialKey()}</kbd><kbd>↩</kbd>`"
+          :label="`${!loading ? t('action.send') : t('action.cancel')}`"
+          class="flex-1 min-w-20"
+          outline
+          @click="!loading ? newSendRequest() : cancelRequest()"
+        />
+        <div class="flex">
+          <HoppButtonSecondary
+            :title="`${t(
+              'request.save'
+            )} <kbd>${getSpecialKey()}</kbd><kbd>S</kbd>`"
+            :label="t('request.save')"
+            filled
+            :icon="IconSave"
+            class="flex-1 rounded"
+            blank
+            outline
+            :to="sharedRequestURL"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script lang="ts" setup>
+import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils"
+import IconSave from "~icons/lucide/save"
+import { Ref } from "vue"
+import { computed, onBeforeUnmount, useModel } from "vue"
+import { ref } from "vue"
+import { useI18n } from "~/composables/i18n"
+import { useToast } from "~/composables/toast"
+import * as E from "fp-ts/Either"
+import { useStreamSubscriber } from "~/composables/stream"
+import { HoppRESTResponse } from "~/helpers/types/HoppRESTResponse"
+import { runRESTRequest$ } from "~/helpers/RequestRunner"
+import { HoppTab } from "~/services/tab"
+import { HoppRequestDocument } from "~/helpers/tab/document"
+import { transformRequestVariablesToAggregateEnv } from "~/helpers/utils/environments"
+
+const toast = useToast()
+const t = useI18n()
+
+const props = defineProps<{
+  modelTab: HoppTab<HoppRequestDocument>
+  sharedRequestURL: string
+}>()
+
+const tab = useModel(props, "modelTab")
+
+const requestCancelFunc: Ref<(() => void) | null> = ref(null)
+
+const loading = ref(false)
+
+const tabRequestVariables = computed(() =>
+  transformRequestVariablesToAggregateEnv(
+    tab.value.document.request.requestVariables
+  )
+)
+
+const { subscribeToStream } = useStreamSubscriber()
+
+const newSendRequest = async () => {
+  if (newEndpoint.value === "" || /^\s+$/.test(newEndpoint.value)) {
+    toast.error(`${t("empty.endpoint")}`)
+    return
+  }
+
+  ensureMethodInEndpoint()
+
+  loading.value = true
+
+  // Viewer envs must not resolve into a shared request's execution
+  const [cancel, streamPromise] = runRESTRequest$(tab, { isolatedEnvs: true })
+  // Store the cancel handle synchronously — `runRESTRequest$` returns it
+  // immediately, before the stream resolves. If we waited until after the
+  // `await` below, an unmount during that window would leave `onBeforeUnmount`
+  // with a null handle and leak the in-flight request.
+  requestCancelFunc.value = cancel
+
+  const streamResult = await streamPromise
+
+  if (E.isRight(streamResult)) {
+    subscribeToStream(
+      streamResult.right,
+      (responseState) => {
+        if (loading.value) {
+          // Check exists because, loading can be set to false
+          // when cancelled
+          updateRESTResponse(responseState)
+        }
+      },
+      (error) => {
+        // Error handler - handle all error types and clear loading
+        const result = error || (streamResult.right as any).value
+
+        if (
+          result?.type === "network_fail" &&
+          result.error?.error === "NO_PW_EXT_HOOK"
+        ) {
+          const errorResponse: HoppRESTResponse = {
+            type: "extension_error",
+            error: result.error.humanMessage.heading,
+            component: result.error.component,
+            req: result.req,
+          }
+          updateRESTResponse(errorResponse)
+        } else if (result?.type === "network_fail" || result?.type === "fail") {
+          // Generic network failure or interceptor error
+          updateRESTResponse(result)
+        }
+
+        // Always clear loading state on error
+        loading.value = false
+      },
+      () => {
+        loading.value = false
+      }
+    )
+  } else {
+    loading.value = false
+    toast.error(`${t("error.script_fail")}`)
+    let error: Error
+    if (typeof streamResult.left === "string") {
+      error = { name: "RequestFailure", message: streamResult.left }
+    } else {
+      error = streamResult.left
+    }
+    updateRESTResponse({
+      type: "script_fail",
+      error,
+    })
+  }
+}
+
+const updateRESTResponse = (response: HoppRESTResponse | null) => {
+  tab.value.document.response = response
+}
+
+const newEndpoint = computed(() => {
+  return tab.value.document.request.endpoint
+})
+
+const ensureMethodInEndpoint = () => {
+  if (
+    !/^http[s]?:\/\//.test(newEndpoint.value) &&
+    !newEndpoint.value.startsWith("<<")
+  ) {
+    const domain = newEndpoint.value.split(/[/:#?]+/)[0]
+    if (domain === "localhost" || /([0-9]+\.)*[0-9]/.test(domain)) {
+      tab.value.document.request.endpoint =
+        "http://" + tab.value.document.request.endpoint
+    } else {
+      tab.value.document.request.endpoint =
+        "https://" + tab.value.document.request.endpoint
+    }
+  }
+}
+
+const cancelRequest = () => {
+  loading.value = false
+  requestCancelFunc.value?.()
+
+  updateRESTResponse(null)
+}
+
+// Cancel any in-flight REST request when the embed iframe is destroyed
+// (host navigation, SPA route change). Otherwise the runner stays
+// subscribed to the response stream after the component is gone — small
+// memory leak that grows if a user clicks between several embed links.
+onBeforeUnmount(() => {
+  requestCancelFunc.value?.()
+})
+</script>

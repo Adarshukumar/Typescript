@@ -1,0 +1,41 @@
+import path from 'node:path'
+import { defineConfig } from 'vite'
+import matrixTestResultPlugin from './matrixTestResultPlugin.ts'
+import safeModulePathPlugin from './safeModulePathPlugin.ts'
+import svgVirtualModulePlugin from './svgVirtualModulePlugin.ts'
+import { getWindows83ShortNameForDotEnv } from './windows83Filename.ts'
+
+export default defineConfig({
+  input: {
+    main: path.resolve(import.meta.dirname, 'src/index.html'),
+  },
+  build: {
+    outDir: 'dist/main',
+  },
+  server: {
+    fs: {
+      strict: true,
+      allow: [path.resolve(import.meta.dirname, 'src')],
+    },
+    hmr: {
+      overlay: false,
+    },
+    headers: {
+      'x-served-by': 'vite',
+    },
+  },
+  preview: {
+    headers: {
+      'x-served-by': 'vite',
+    },
+  },
+  define: {
+    ROOT: JSON.stringify(path.dirname(import.meta.dirname).replace(/\\/g, '/')),
+    DOTENV83SHORTNAME: JSON.stringify(getWindows83ShortNameForDotEnv()),
+  },
+  plugins: [
+    svgVirtualModulePlugin(),
+    safeModulePathPlugin(),
+    matrixTestResultPlugin(),
+  ],
+})

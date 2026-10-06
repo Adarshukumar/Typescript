@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "jsx": "react",
+    "lib": ["DOM", "ESNext"],
+    "module": "esnext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noEmitOnError": true,
+    "noErrorTruncation": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "outDir": "./dist",
+    "paths": {
+      // internal imports in tests only
+      "@internal/*": ["./src/*"],
+      "@reduxjs/toolkit": ["./src/index.ts"], // @remap-prod-remove-line
+      "@reduxjs/toolkit/query": ["./src/query/index.ts"], // @remap-prod-remove-line
+      "@reduxjs/toolkit/query/react": ["./src/query/react/index.ts"], // @remap-prod-remove-line
+      "@reduxjs/toolkit/react": ["./src/react/index.ts"] // @remap-prod-remove-line
+    },
+    "resolveJsonModule": true,
+    "rootDir": "./src",
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "target": "esnext",
+    "types": ["node", "vitest/globals", "vitest/importMeta"],
+    "useDefineForClassFields": true,
+    "useUnknownInCatchVariables": true
+  }
+}

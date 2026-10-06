@@ -1,0 +1,55 @@
+name: Release Commit
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release Commit
+    # The pkg-pr-new app is only installed on the main repo. Pushes to fork
+    # branches would otherwise run this in the fork and fail.
+    if: github.repository == 'reduxjs/redux-toolkit'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # pnpm/setup has to run before setup-node, or setup-node's
+      # `cache: 'pnpm'` cannot find the pnpm store to cache. It also installs
+      # the version named in package.json's `packageManager`, so the previous
+      # `corepack enable` step is redundant and would fight with it.
+      - uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          cache: 'pnpm'
+          check-latest: true
+          node-version: '24.x'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm run build:packages
+
+      # pkg-pr-new's `--pnpm` flag tells it which package manager built the
+      # workspace. The `--packageManager` list is unrelated: it only controls
+      # which install commands the PR comment offers to readers.
+      - name: Publish
+        id: publish
+        run: >
+          pnpm exec pkg-pr-new publish
+          ./packages/toolkit
+          ./packages/rtk-query-graphql-request-base-query
+          ./packages/rtk-query-codegen-openapi
+          ./packages/rtk-codemods
+          --pnpm --packageManager="npm,yarn,pnpm,bun" --commentWithDev --commentWithSha

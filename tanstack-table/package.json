@@ -1,0 +1,101 @@
+{
+  "name": "table",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TanStack/table.git"
+  },
+  "packageManager": "pnpm@12.8.2",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=11.9.0"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "nx affected --targets=build --exclude='examples/**' && size-limit",
+    "build:all": "nx run-many --targets=build --exclude='examples/**' && size-limit",
+    "build:core": "nx build @tanstack/table-core && size-limit",
+    "changeset": "changeset",
+    "changeset:publish": "changeset publish",
+    "changeset:version": "changeset version && pnpm install --no-frozen-lockfile && pnpm run skills:versions:fix && pnpm format",
+    "clean:build": "find . -name 'dist' -type d -prune -exec rm -rf {} +",
+    "clean:node_modules": "find . -name 'node_modules' -type d -prune -exec rm -rf {} +",
+    "dev": "pnpm run watch",
+    "copy:readme": "cp README.md packages/table-core/README.md && cp README.md packages/table-devtools/README.md && cp README.md packages/react-table/README.md && cp README.md packages/react-table-devtools/README.md && cp README.md packages/preact-table/README.md && cp README.md packages/preact-table-devtools/README.md && cp README.md packages/angular-table/README.md && cp README.md packages/ember-table/README.md && cp README.md packages/solid-table/README.md && cp README.md packages/solid-table-devtools/README.md && cp README.md packages/vue-table/README.md && cp README.md packages/vue-table-devtools/README.md && cp README.md packages/lit-table/README.md && cp README.md packages/svelte-table/README.md && cp README.md packages/match-sorter-utils/README.md && cp README.md packages/alpine-table/README.md && cp README.md packages/octane-table/README.md",
+    "generate-docs": "node scripts/generateDocs.js && pnpm run copy:readme",
+    "format": "prettier --experimental-cli --ignore-unknown '**/*' --write",
+    "lint:fix:all": "pnpm run format && nx run-many --targets=lint --fix",
+    "lint:fix": "nx affected --target=lint:fix --exclude=examples/**",
+    "size": "size-limit",
+    "test": "pnpm run test:ci",
+    "test:build": "nx affected --target=test:build",
+    "test:ci": "pnpm run test:compiler-examples && nx run-many --targets=test:eslint,test:sherif,test:knip,test:lib,test:types,test:build,build",
+    "test:compiler-examples": "node scripts/verify-react-compiler-examples.mjs",
+    "test:docs": "node scripts/verify-links.ts",
+    "test:e2e": "pnpm run test:e2e:infrastructure && node scripts/run-e2e-with-retry.mjs",
+    "test:e2e:affected": "pnpm run test:e2e:infrastructure && node scripts/run-e2e-with-retry.mjs --affected",
+    "test:e2e:install": "playwright install chromium",
+    "test:eslint": "nx affected --target=test:eslint",
+    "test:intent": "intent validate && intent stale",
+    "test:skill-content": "node scripts/validate-skill-content.mjs",
+    "test:skill-snippets": "node scripts/typecheck-skill-snippets.mjs",
+    "test:skill-tree": "node scripts/validate-skill-tree.mjs && node --test scripts/tests/skill-tree.test.mjs",
+    "test:skills": "intent validate && pnpm skills:versions:check && pnpm test:skill-tree && pnpm test:skill-content && pnpm test:skill-snippets",
+    "test:knip": "NODE_OPTIONS='--max-old-space-size=4096' knip",
+    "test:lib": "nx affected --targets=test:lib",
+    "test:lib:dev": "pnpm test:lib && nx watch --all -- pnpm test:lib",
+    "test:pr": "pnpm run test:compiler-examples && nx affected --targets=test:eslint,test:sherif,test:knip,test:lib,test:types,test:build,build",
+    "test:sherif": "sherif",
+    "test:types": "nx affected --targets=test:types",
+    "skills:versions:check": "node scripts/sync-skill-versions.mjs",
+    "skills:versions:fix": "node scripts/sync-skill-versions.mjs --write",
+    "watch": "pnpm run build:all && nx watch --all -- pnpm run build:all",
+    "test:e2e:infrastructure": "node --test scripts/tests/e2e-infrastructure.test.mjs"
+  },
+  "nx": {
+    "includedScripts": [
+      "format",
+      "test:docs",
+      "test:knip",
+      "test:sherif"
+    ]
+  },
+  "size-limit": [
+    {
+      "path": "packages/table-core/dist/index.js",
+      "limit": "30 KB"
+    }
+  ],
+  "devDependencies": {
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
+    "@faker-js/faker": "^10.6.0",
+    "@playwright/test": "^1.63.0",
+    "@size-limit/preset-small-lib": "^14.1.0",
+    "@tanstack/eslint-config": "0.4.0",
+    "@tanstack/intent": "0.4.0",
+    "@tanstack/typedoc-config": "0.3.4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@types/node": "^26.6.4",
+    "@typescript-eslint/parser": "8.71.0",
+    "@vitest/coverage-v8": "4.1.11",
+    "eslint": "^10.11.0",
+    "jsdom": "^30.1.1",
+    "knip": "^6.39.0",
+    "markdown-link-extractor": "^4.0.4",
+    "nx": "^23.2.1",
+    "prettier": "^3.9.9",
+    "prettier-plugin-ember-template-tag": "^2.1.8",
+    "prettier-plugin-svelte": "^4.1.1",
+    "publint": "^0.3.25",
+    "rimraf": "^6.1.3",
+    "sherif": "^1.13.0",
+    "size-limit": "^14.1.0",
+    "tinyglobby": "^0.2.17",
+    "tsdown": "^0.23.0",
+    "typescript": "6.0.3",
+    "vite": "^8.3.2",
+    "vitest": "^4.1.11",
+    "yaml": "2.9.0"
+  }
+}

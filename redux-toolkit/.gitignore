@@ -1,0 +1,41 @@
+.DS_Store
+*.log
+node_modules
+# Dist and query are both build output folders
+dist*/
+# But don't ignore the RTK Query source
+lib
+es
+
+.yalc
+yalc.lock
+yalc.sig
+
+.idea/
+.vscode/
+temp/
+.tmp-projections
+build/
+.rts2*
+coverage/
+
+typesversions
+.cache
+# Nothing in this repo uses Yarn any more. These stay so a stray local `yarn`
+# invocation does not add untracked files.
+.yarnrc
+.yarn/
+.pnp.*
+*.tgz
+
+tsconfig.vitest-temp.json
+
+# node version manager files
+.node-version
+.nvmrc
+
+# Assorted local docs
+docs/dev-plans
+# Perf protobufs
+*.pb.gz
+.combined/

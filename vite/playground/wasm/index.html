@@ -1,0 +1,142 @@
+<h1>Web Assembly</h1>
+
+<div class="inline-wasm">
+  <h3>When wasm is inline, result should be 42</h3>
+  <button class="run">Click to run</button>
+  <span class="result"></span>
+</div>
+
+<div class="output-wasm">
+  <h3>When wasm is output, result should be 24</h3>
+  <button class="run">Click to run</button>
+  <span class="result"></span>
+</div>
+
+<div class="init-returns-instance">
+  <h3>init function returns WebAssembly.Instance</h3>
+  <button class="run">Click to run</button>
+  <span class="result"></span>
+</div>
+
+<div>
+  <h3>Importing as URL</h3>
+  <span class="url"></span>
+</div>
+
+<div class="worker-wasm">
+  <h3>worker wasm</h3>
+  <span class="result"></span>
+</div>
+
+<div class="direct-wasm">
+  <h3>Direct wasm import, result should be 3</h3>
+  <span class="result"></span>
+</div>
+
+<div class="direct-wasm-with-imports">
+  <h3>Direct wasm import with wasm imports, result should be 42</h3>
+  <span class="result"></span>
+</div>
+
+<div class="direct-wasm-global">
+  <h3>Direct wasm import of a global, result should be 42 (number)</h3>
+  <span class="result"></span>
+</div>
+
+<div class="direct-wasm-global-import">
+  <h3>wasm importing a global from another wasm, result should be 43</h3>
+  <span class="result"></span>
+</div>
+
+<div class="direct-wasm-mutable-global-import">
+  <h3>
+    wasm reading a mutable global mutated by another wasm, result should be 9
+  </h3>
+  <span class="result"></span>
+</div>
+
+<div class="direct-wasm-string-builtins">
+  <h3>
+    wasm using js-string builtins and imported string constants, result should
+    be 5
+  </h3>
+  <span class="result"></span>
+</div>
+
+<script type="module">
+  import light from './light.wasm?init'
+  import heavy from './heavy.wasm?init'
+  import myWorker from './worker?worker'
+  import { add } from './add.wasm'
+  import { exported_func } from './light-with-imports.wasm'
+  import { getResult } from './imports.js'
+  import { answer } from './global.wasm'
+  import { getAnswerPlusOne, readCounter } from './global-consumer.wasm'
+  import { bumpCounter } from './global.wasm'
+  import { helloLength } from './string-constants.wasm'
+
+  const w = new myWorker()
+  w.addEventListener('message', (ev) => {
+    text('.worker-wasm .result', ev.data.result)
+  })
+
+  text('.direct-wasm .result', add(1, 2))
+
+  exported_func()
+  text('.direct-wasm-with-imports .result', getResult())
+
+  text('.direct-wasm-global .result', `${answer} ${typeof answer}`)
+  text('.direct-wasm-global-import .result', getAnswerPlusOne())
+
+  // The mutable global is a single live cell shared between the two wasm
+  // modules: mutating it from one is observed by the other (7 + 2 = 9).
+  bumpCounter()
+  bumpCounter()
+  text('.direct-wasm-mutable-global-import .result', readCounter())
+
+  // 'hello'.length, where 'hello' is an engine-provided imported string constant
+  // and `length` is a js-string builtin.
+  text('.direct-wasm-string-builtins .result', helloLength())
+
+  async function testWasm(init, resultElement) {
+    const { exported_func } = await init({
+      imports: {
+        imported_func: (res) => (resultElement.textContent = res),
+      },
+    }).then((i) => i.exports)
+    exported_func()
+  }
+
+  function text(el, text) {
+    document.querySelector(el).textContent = text
+  }
+
+  document
+    .querySelector('.inline-wasm .run')
+    .addEventListener('click', async () =>
+      testWasm(light, document.querySelector('.inline-wasm .result')),
+    )
+
+  document
+    .querySelector('.output-wasm .run')
+    .addEventListener('click', async () =>
+      testWasm(heavy, document.querySelector('.output-wasm .result')),
+    )
+
+  document
+    .querySelector('.init-returns-instance .run')
+    .addEventListener('click', async () => {
+      const res = await light({
+        imports: {
+          imported_func: (res) => (resultElement.textContent = res),
+        },
+      })
+      text(
+        '.init-returns-instance .result',
+        res instanceof WebAssembly.Instance,
+      )
+    })
+
+  import lightUrl from './light.wasm?url'
+  text('.url', lightUrl)
+</script>

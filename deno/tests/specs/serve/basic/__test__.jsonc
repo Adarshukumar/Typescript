@@ -1,0 +1,6 @@
+{
+  "tempDir": true,
+  "args": "serve --check --allow-net --host 0.0.0.0 --port 0 main.ts",
+  "output": "main.out",
+  "exitCode": 0
+}

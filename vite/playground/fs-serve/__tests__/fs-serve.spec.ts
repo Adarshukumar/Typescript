@@ -1,0 +1,141 @@
+import net from 'node:net'
+import path from 'node:path'
+import { describe, expect, test } from 'vitest'
+import { isBundledDev, isServe, isWindows, page, viteTestUrl } from '~utils'
+import './commonTests'
+
+describe.runIf(isServe)('safe module paths', () => {
+  test('keeps root-relative module URLs separate from absolute filesystem paths', async () => {
+    await expect
+      .poll(() => page.textContent('.safe-module-path-status'))
+      .toBe(isBundledDev || isWindows ? '404' : '403')
+  })
+})
+
+describe.runIf(isServe)('invalid request', () => {
+  const sendRawRequest = async (baseUrl: string, requestTarget: string) => {
+    return new Promise<string>((resolve, reject) => {
+      const parsedUrl = new URL(baseUrl)
+
+      const buf: Buffer[] = []
+      const client = net.createConnection(
+        { port: +parsedUrl.port, host: parsedUrl.hostname },
+        () => {
+          client.write(
+            [
+              `GET ${encodeURI(requestTarget)} HTTP/1.1`,
+              `Host: ${parsedUrl.host}`,
+              'Connection: Close',
+              '\r\n',
+            ].join('\r\n'),
+          )
+        },
+      )
+      client.on('data', (data) => {
+        buf.push(data)
+      })
+      client.on('end', (hadError) => {
+        if (!hadError) {
+          resolve(Buffer.concat(buf).toString())
+        }
+      })
+      client.on('error', (err) => {
+        reject(err)
+      })
+    })
+  }
+
+  const root = path
+    .resolve(import.meta.dirname.replace('playground', 'playground-temp'), '..')
+    .replace(/\\/g, '/')
+  // bundled dev serves only the bundle output and the public directory. Other
+  // requests fall back to `/index.html`, which this playground does not have.
+  const notFound = 'HTTP/1.1 404 Not Found'
+  const testCases: Array<{
+    name: string
+    target: string
+    status: string
+    content?: string
+  }> = [
+    {
+      name: 'basic request',
+      target: '/src/safe.txt',
+      status: isBundledDev ? notFound : 'HTTP/1.1 200 OK',
+      content: isBundledDev ? undefined : 'KEY=safe',
+    },
+    {
+      name: 'request with /@fs/',
+      target: path.posix.join('/@fs/', root, 'root/src/safe.txt'),
+      status: isBundledDev ? notFound : 'HTTP/1.1 200 OK',
+      content: isBundledDev ? undefined : 'KEY=safe',
+    },
+    {
+      name: '# in request-target',
+      target: '/src/safe.txt#/../../unsafe.txt',
+      status: 'HTTP/1.1 400 Bad Request',
+    },
+    {
+      name: '# in request-target with /@fs/',
+      target:
+        path.posix.join('/@fs/', root, 'root/src/safe.txt') +
+        '#/../../unsafe.txt',
+      status: 'HTTP/1.1 400 Bad Request',
+    },
+    {
+      name: 'denied file with /.',
+      target: '/src/dummy.crt/.',
+      status: isBundledDev ? notFound : 'HTTP/1.1 403 Forbidden',
+    },
+    {
+      name: 'denied file ending with \\',
+      target: '/src/.env\\',
+      status: isWindows && !isBundledDev ? 'HTTP/1.1 403 Forbidden' : notFound,
+    },
+    {
+      name: 'denied file ending with \\ with /@fs/',
+      target: path.posix.join('/@fs/', root, 'root/src/.env') + '\\',
+      status: isWindows && !isBundledDev ? 'HTTP/1.1 403 Forbidden' : notFound,
+    },
+    {
+      name: 'denied file with /. with /@fs/',
+      target: path.posix.join('/@fs/', root, 'root/src/dummy.crt/') + '.',
+      status: isBundledDev ? notFound : 'HTTP/1.1 403 Forbidden',
+    },
+    {
+      name: 'denied optimize deps sourcemap handler',
+      target:
+        path.posix.join('/@fs/', root) +
+        '/node_modules/.vite/deps/../../../unsafe.map',
+      status: isBundledDev ? notFound : 'HTTP/1.1 403 Forbidden',
+    },
+    {
+      name: 'denied backslash optimize deps sourcemap handler',
+      target:
+        path.posix.join('/@fs/', root) +
+        '/node_modules/.vite/deps/..\\..\\..\\unsafe.map',
+      // the plain-dev 200 comes from the dep optimizer's sourcemap handler,
+      // which bundled dev does not have
+      status: isBundledDev
+        ? notFound
+        : isWindows
+          ? 'HTTP/1.1 403 Forbidden'
+          : 'HTTP/1.1 200 OK',
+      content:
+        isWindows || isBundledDev ? undefined : 'Cache-Control: no-cache',
+    },
+    {
+      name: 'HTML outside root with relative path',
+      target: '/../unsafe.html',
+      status: isBundledDev ? notFound : 'HTTP/1.1 403 Forbidden',
+    },
+  ]
+  for (const { name, target, status, content } of testCases) {
+    test(name, async () => {
+      const response = await sendRawRequest(viteTestUrl, target)
+      expect(response).toContain(status)
+      if (content !== undefined) {
+        expect(response).toContain(content)
+      }
+    })
+  }
+})

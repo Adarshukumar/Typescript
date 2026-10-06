@@ -1,0 +1,303 @@
+import * as React from 'react';
+import CloseOutlined from '@ant-design/icons/CloseOutlined';
+import EllipsisOutlined from '@ant-design/icons/EllipsisOutlined';
+import PlusOutlined from '@ant-design/icons/PlusOutlined';
+import type {
+  EditableConfig,
+  GetIndicatorSize,
+  MoreProps,
+  TabsProps as RcTabsProps,
+  Tab,
+} from '@rc-component/tabs';
+import RcTabs from '@rc-component/tabs';
+import { clsx } from 'clsx';
+
+import { useMergeSemantic, useSemanticRootStyle } from '../_util/hooks/useMergeSemantic';
+import type { GenerateSemantic } from '../_util/hooks/useMergeSemantic/semanticType';
+import { devUseWarning } from '../_util/warning';
+import { ConfigContext } from '../config-provider';
+import { useComponentConfig } from '../config-provider/context';
+import useCSSVarCls from '../config-provider/hooks/useCSSVarCls';
+import useSize from '../config-provider/hooks/useSize';
+import type { SizeType } from '../config-provider/SizeContext';
+import useAnimateConfig from './hooks/useAnimateConfig';
+import useLegacyItems from './hooks/useLegacyItems';
+import useStyle from './style';
+import TabPane from './TabPane';
+import type { TabPaneProps } from './TabPane';
+
+export type TabsType = 'line' | 'card' | 'editable-card';
+
+export type TabPosition = 'top' | 'right' | 'bottom' | 'left';
+
+export type TabPlacement = 'top' | 'end' | 'bottom' | 'start';
+
+export type { TabPaneProps };
+
+export type TabsSemanticType = {
+  classNames?: {
+    root?: string;
+    item?: string;
+    remove?: string;
+    indicator?: string;
+    body?: string;
+    content?: string;
+    header?: string;
+    popup?: { root?: string };
+  };
+  styles?: {
+    root?: React.CSSProperties;
+    item?: React.CSSProperties;
+    remove?: React.CSSProperties;
+    indicator?: React.CSSProperties;
+    body?: React.CSSProperties;
+    content?: React.CSSProperties;
+    header?: React.CSSProperties;
+    popup?: { root?: React.CSSProperties };
+  };
+};
+
+export type TabsSemanticAllType = GenerateSemantic<TabsSemanticType, TabsProps>;
+
+export interface CompatibilityProps {
+  /** @deprecated Please use `destroyOnHidden` instead */
+  destroyInactiveTabPane?: boolean;
+}
+
+export interface TabsRef {
+  nativeElement: React.ComponentRef<typeof RcTabs> | null;
+}
+
+export interface BaseTabsProps {
+  type?: TabsType;
+  size?: SizeType;
+  hideAdd?: boolean;
+  centered?: boolean;
+  className?: string;
+  rootClassName?: string;
+  classNames?: TabsSemanticAllType['classNamesAndFn'];
+  styles?: TabsSemanticAllType['stylesAndFn'];
+  /** @deprecated please use `tabPlacement` instead */
+  tabPosition?: TabPosition;
+  tabPlacement?: TabPlacement;
+  onEdit?: (e: React.MouseEvent | React.KeyboardEvent | string, action: 'add' | 'remove') => void;
+  children?: React.ReactNode;
+  /** @deprecated Please use `indicator={{ size: ... }}` instead */
+  indicatorSize?: GetIndicatorSize;
+  items?: (Tab & CompatibilityProps)[];
+}
+
+export interface TabsProps
+  extends BaseTabsProps,
+    CompatibilityProps,
+    Omit<RcTabsProps, 'editable' | 'items' | 'classNames' | 'styles' | 'popupClassName'> {
+  addIcon?: React.ReactNode;
+  moreIcon?: React.ReactNode;
+  more?: MoreProps;
+  removeIcon?: React.ReactNode;
+  /** @deprecated Please use `classNames.popup` instead */
+  popupClassName?: string;
+}
+
+const InternalTabs = React.forwardRef<TabsRef, TabsProps>((props, ref) => {
+  const {
+    type,
+    className,
+    rootClassName,
+    size: customSize,
+    onEdit,
+    hideAdd,
+    centered,
+    addIcon,
+    removeIcon,
+    moreIcon,
+    more,
+    popupClassName,
+    children,
+    items,
+    animated,
+    style,
+    indicatorSize,
+    indicator,
+    classNames,
+    styles,
+    destroyInactiveTabPane,
+    destroyOnHidden,
+    tabPlacement,
+    tabPosition,
+    ...restProps
+  } = props;
+
+  const { prefixCls: customizePrefixCls } = restProps;
+
+  const {
+    getPrefixCls,
+    direction,
+    getPopupContainer,
+    className: contextClassName,
+    style: contextStyle,
+    classNames: contextClassNames,
+    styles: contextStyles,
+  } = useComponentConfig('tabs');
+
+  const { tabs } = React.useContext(ConfigContext);
+  const prefixCls = getPrefixCls('tabs', customizePrefixCls);
+  const rootCls = useCSSVarCls(prefixCls);
+  const [hashId, cssVarCls] = useStyle(prefixCls, rootCls);
+
+  const tabsRef = React.useRef<TabsRef['nativeElement']>(null);
+
+  React.useImperativeHandle(ref, () => ({
+    nativeElement: tabsRef.current,
+  }));
+
+  let editable: EditableConfig | undefined;
+  if (type === 'editable-card') {
+    editable = {
+      onEdit: (editType, { key, event }) => {
+        onEdit?.(editType === 'add' ? event : key!, editType);
+      },
+      removeIcon: removeIcon ?? tabs?.removeIcon ?? <CloseOutlined />,
+      addIcon: (addIcon ?? tabs?.addIcon) || <PlusOutlined />,
+      showAdd: hideAdd !== true,
+    };
+  }
+  const rootPrefixCls = getPrefixCls();
+
+  if (process.env.NODE_ENV !== 'production') {
+    const warning = devUseWarning('Tabs');
+    [
+      ['popupClassName', 'classNames.popup'],
+      ['tabPosition', 'tabPlacement'],
+    ].forEach(([deprecatedName, newName]) => {
+      warning.deprecated(!(deprecatedName in props), deprecatedName, newName);
+    });
+    warning(
+      !('onPrevClick' in props) && !('onNextClick' in props),
+      'breaking',
+      '`onPrevClick` and `onNextClick` has been removed. Please use `onTabScroll` instead.',
+    );
+
+    warning(
+      !(indicatorSize || tabs?.indicatorSize),
+      'deprecated',
+      '`indicatorSize` has been deprecated. Please use `indicator={{ size: ... }}` instead.',
+    );
+
+    warning.deprecated(
+      !(
+        'destroyInactiveTabPane' in props || items?.some((item) => 'destroyInactiveTabPane' in item)
+      ),
+      'destroyInactiveTabPane',
+      'destroyOnHidden',
+    );
+  }
+
+  const size = useSize(customSize);
+
+  const mergedItems = useLegacyItems(items, children);
+
+  const mergedAnimated = useAnimateConfig(prefixCls, animated);
+
+  const mergedIndicator: TabsProps['indicator'] = {
+    align: indicator?.align ?? tabs?.indicator?.align,
+    size: indicator?.size ?? indicatorSize ?? tabs?.indicator?.size ?? tabs?.indicatorSize,
+  };
+
+  const mergedPlacement: TabPosition | undefined = React.useMemo(() => {
+    const placement = tabPlacement ?? tabPosition ?? undefined;
+    const isRTL = direction === 'rtl';
+    switch (placement) {
+      case 'start':
+        return isRTL ? 'right' : 'left';
+      case 'end':
+        return isRTL ? 'left' : 'right';
+      default:
+        return placement;
+    }
+  }, [tabPlacement, tabPosition, direction]);
+
+  // =========== Merged Props for Semantic ===========
+  const mergedProps: TabsProps = {
+    ...props,
+    size,
+    tabPlacement: mergedPlacement as TabPlacement,
+    items: mergedItems,
+  };
+
+  // ========================= Style ==========================
+  const contextStyleRoot = useSemanticRootStyle(contextStyle);
+  const styleRoot = useSemanticRootStyle(style);
+
+  const [mergedClassNames, mergedStyles] = useMergeSemantic<
+    TabsSemanticAllType['classNames'],
+    TabsSemanticAllType['styles'],
+    TabsProps
+  >(
+    [contextClassNames, classNames],
+    [contextStyles, contextStyleRoot, styles, styleRoot],
+    {
+      props: mergedProps,
+    },
+    {
+      popup: {
+        _default: 'root',
+      },
+    },
+  );
+
+  return (
+    <RcTabs
+      ref={tabsRef}
+      direction={direction}
+      getPopupContainer={getPopupContainer}
+      {...restProps}
+      items={mergedItems}
+      className={clsx(
+        {
+          [`${prefixCls}-large`]: size === 'large',
+          [`${prefixCls}-small`]: size === 'small',
+          [`${prefixCls}-card`]: ['card', 'editable-card'].includes(type!),
+          [`${prefixCls}-editable-card`]: type === 'editable-card',
+          [`${prefixCls}-centered`]: centered,
+        },
+        contextClassName,
+        className,
+        rootClassName,
+        mergedClassNames.root,
+        hashId,
+        cssVarCls,
+        rootCls,
+      )}
+      classNames={{
+        ...mergedClassNames,
+        popup: clsx(popupClassName, hashId, cssVarCls, rootCls, mergedClassNames.popup?.root),
+      }}
+      // `popup` is nested as `{ root }` in antd but flat in rc-tabs, same as `classNames` above
+      styles={{ ...mergedStyles, popup: mergedStyles.popup?.root }}
+      style={mergedStyles.root}
+      editable={editable}
+      more={{
+        icon: tabs?.more?.icon ?? tabs?.moreIcon ?? moreIcon ?? <EllipsisOutlined />,
+        transitionName: `${rootPrefixCls}-slide-up`,
+        ...more,
+      }}
+      prefixCls={prefixCls}
+      animated={mergedAnimated}
+      indicator={mergedIndicator}
+      destroyOnHidden={destroyOnHidden ?? destroyInactiveTabPane}
+      tabPosition={mergedPlacement}
+    />
+  );
+});
+
+type CompoundedComponent = typeof InternalTabs & { TabPane: typeof TabPane };
+
+const Tabs = InternalTabs as CompoundedComponent;
+Tabs.TabPane = TabPane;
+
+if (process.env.NODE_ENV !== 'production') {
+  Tabs.displayName = 'Tabs';
+}
+
+export default Tabs;

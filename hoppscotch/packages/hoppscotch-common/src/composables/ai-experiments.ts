@@ -1,0 +1,363 @@
+import { computed, Ref, ref, watch } from "vue"
+import { useEventListener } from "@vueuse/core"
+import { useService } from "dioc/vue"
+import { useReadonlyStream } from "./stream"
+import { platform } from "~/platform"
+import { useSetting } from "./settings"
+import { HoppGQLRequest, HoppRESTRequest, isGQLRequest } from "@hoppscotch/data"
+import { useToast } from "@composables/toast"
+import { useI18n } from "@composables/i18n"
+import * as E from "fp-ts/Either"
+import { invokeAction } from "~/helpers/actions"
+import { AIChatService } from "~/services/ai-chat.service"
+
+export const useRequestNameGeneration = (targetNameRef: Ref<string>) => {
+  const toast = useToast()
+  const t = useI18n()
+
+  const isGenerateRequestNamePending = ref(false)
+
+  const generateRequestNameForPlatform =
+    platform.experiments?.aiExperiments?.generateRequestName
+
+  const currentUser = useReadonlyStream(
+    platform.auth.getCurrentUserStream(),
+    platform.auth.getCurrentUser()
+  )
+
+  // The settings page gates the naming-style picker on the same check.
+  const { shouldEnableAIFeatures: canDoRequestNameGeneration } =
+    useAIExperiments("generateRequestName")
+
+  const lastTraceID = ref<string | null>(null)
+
+  const generateRequestName = async (
+    requestContext: HoppRESTRequest | HoppGQLRequest | null
+  ) => {
+    if (!currentUser.value) {
+      invokeAction("modals.login.toggle")
+      return
+    }
+
+    if (!requestContext || !generateRequestNameForPlatform) {
+      toast.error(t("request.generate_name_error"))
+      return
+    }
+
+    const namingStyle = useSetting("AI_REQUEST_NAMING_STYLE").value
+    const customNamingStyle = useSetting("CUSTOM_NAMING_STYLE").value
+
+    isGenerateRequestNamePending.value = true
+
+    // Derive from the request itself — the route can't tell a GQL request
+    // apart on the unified REST page
+    platform.analytics?.logEvent({
+      type: "EXPERIMENTS_GENERATE_REQUEST_NAME_WITH_AI",
+      platform: isGQLRequest(requestContext) ? "gql" : "rest",
+    })
+
+    const result = await generateRequestNameForPlatform(
+      JSON.stringify(requestContext),
+      namingStyle === "CUSTOM" ? customNamingStyle : namingStyle
+    )
+
+    if (result && E.isLeft(result)) {
+      toast.error(t("request.generate_name_error"))
+
+      isGenerateRequestNamePending.value = false
+
+      return
+    }
+
+    targetNameRef.value = result.right.request_name
+    lastTraceID.value = result.right.trace_id
+
+    isGenerateRequestNamePending.value = false
+  }
+
+  return {
+    generateRequestName,
+    isGenerateRequestNamePending,
+    canDoRequestNameGeneration,
+    lastTraceID,
+  }
+}
+
+/**
+ * The individual AI capabilities a platform may implement. Mirrors the
+ * function members of `ExperimentsPlatformDef["aiExperiments"]`.
+ */
+export type AIExperimentsCapability = keyof Omit<
+  NonNullable<NonNullable<typeof platform.experiments>["aiExperiments"]>,
+  "enableAIExperiments"
+>
+
+/**
+ * Whether AI features should be surfaced. Pass the capability a feature relies
+ * on so its UI only shows when the platform actually implements it — platforms
+ * may provide a subset (e.g. self-host implements only `chat`). With no
+ * capability given, checks only that AI experiments exist at all.
+ */
+export const useAIExperiments = (capability?: AIExperimentsCapability) => {
+  const ENABLE_AI_EXPERIMENTS = useSetting("ENABLE_AI_EXPERIMENTS")
+
+  const shouldEnableAIFeatures = computed(() => {
+    const aiExperiments = platform.experiments?.aiExperiments
+    if (!ENABLE_AI_EXPERIMENTS.value || !aiExperiments) return false
+    return capability ? !!aiExperiments[capability] : true
+  })
+
+  return {
+    shouldEnableAIFeatures,
+  }
+}
+
+/**
+ * Whether the "AI Experiments" setting is worth showing. Where the chat is the
+ * platform's only AI feature, that waits for the server to say it is on.
+ */
+export const useAIExperimentsSupport = () => {
+  const ai = platform.experiments?.aiExperiments
+  const chat = useService(AIChatService)
+  const ENABLE_AI_EXPERIMENTS = useSetting("ENABLE_AI_EXPERIMENTS")
+  const currentUser = useReadonlyStream(
+    platform.auth.getCurrentUserStream(),
+    platform.auth.getCurrentUser()
+  )
+
+  // The assistant skips its lookup while AI is off; this still needs it.
+  const lookUp = () => {
+    if (
+      currentUser.value &&
+      !ENABLE_AI_EXPERIMENTS.value &&
+      !chat.availabilityKnown.value
+    )
+      void chat.loadAvailability()
+  }
+  watch(currentUser, lookUp, { immediate: true })
+  // A failed lookup would hide the setting; ask again when the user is back.
+  useEventListener(window, ["focus", "online"], lookUp)
+
+  const offersOtherAI = !!(
+    ai?.generateRequestName ||
+    ai?.modifyRequestBody ||
+    ai?.modifyPreRequestScript ||
+    ai?.modifyTestScript
+  )
+  return computed(
+    () => !!ai?.enableAIExperiments && (offersOtherAI || chat.available.value)
+  )
+}
+
+export const useModifyRequestBody = (
+  currentRequestBody: string,
+  userPromptRef: Ref<string>,
+  generatedRequestBodyRef: Ref<string>
+) => {
+  const toast = useToast()
+  const t = useI18n()
+
+  const lastTraceID = ref<string | null>(null)
+
+  const isModifyRequestBodyPending = ref(false)
+
+  const modifyRequestBodyForPlatform =
+    platform.experiments?.aiExperiments?.modifyRequestBody
+
+  const modifyRequestBody = async () => {
+    isModifyRequestBodyPending.value = true
+
+    if (!modifyRequestBodyForPlatform) {
+      toast.error(t("ai_experiments.modify_request_body_error"))
+      isModifyRequestBodyPending.value = false
+      return
+    }
+
+    const result = await modifyRequestBodyForPlatform(
+      currentRequestBody ?? "",
+      userPromptRef.value
+    )
+
+    if (result && E.isLeft(result)) {
+      toast.error(t("ai_experiments.modify_request_body_error"))
+      isModifyRequestBodyPending.value = false
+      return
+    }
+
+    generatedRequestBodyRef.value = result.right.modified_body
+    lastTraceID.value = result.right.trace_id
+
+    isModifyRequestBodyPending.value = false
+    return result.right
+  }
+
+  return {
+    modifyRequestBody,
+    isModifyRequestBodyPending,
+    lastTraceID,
+  }
+}
+
+export const useSubmitFeedback = () => {
+  const submitFeedbackForPlatform =
+    platform.experiments?.aiExperiments?.submitFeedback
+
+  const t = useI18n()
+  const toast = useToast()
+
+  const isSubmitFeedbackPending = ref(false)
+
+  const submitFeedback = async (
+    rating: "positive" | "negative",
+    traceID: string
+  ) => {
+    if (!submitFeedbackForPlatform) {
+      toast.error(t("ai_experiments.feedback_failure"))
+
+      return
+    }
+
+    isSubmitFeedbackPending.value = true
+
+    const res = await submitFeedbackForPlatform(
+      rating === "positive" ? 1 : -1,
+      traceID
+    )
+
+    if (E.isLeft(res)) {
+      toast.error(t("ai_experiments.feedback_failure"))
+      isSubmitFeedbackPending.value = false
+      return
+    }
+
+    isSubmitFeedbackPending.value = false
+
+    return E.right(undefined)
+  }
+
+  return {
+    submitFeedback,
+    isSubmitFeedbackPending,
+  }
+}
+
+export const useModifyPreRequestScript = (
+  currentScript: string,
+  userPromptRef: Ref<string>,
+  generatedScriptRef: Ref<string>,
+  requestInfo: HoppRESTRequest
+) => {
+  const toast = useToast()
+  const t = useI18n()
+  const lastTraceID = ref<string | null>(null)
+  const isModifyPreRequestPending = ref(false)
+
+  const modifyPreRequestScriptForPlatform =
+    platform.experiments?.aiExperiments?.modifyPreRequestScript
+
+  const modifyPreRequestScript = async () => {
+    isModifyPreRequestPending.value = true
+
+    if (!modifyPreRequestScriptForPlatform) {
+      toast.error(t("ai_experiments.modify_prerequest_error"))
+      isModifyPreRequestPending.value = false
+      return
+    }
+
+    const result = await modifyPreRequestScriptForPlatform(
+      buildRequestInfoString(requestInfo, currentScript),
+      userPromptRef.value
+    )
+
+    if (result && E.isLeft(result)) {
+      toast.error(t("ai_experiments.modify_prerequest_error"))
+      isModifyPreRequestPending.value = false
+      return
+    }
+
+    generatedScriptRef.value = result.right.modified_script
+    lastTraceID.value = result.right.trace_id
+
+    isModifyPreRequestPending.value = false
+    return result.right
+  }
+
+  return {
+    modifyPreRequestScript,
+    isModifyPreRequestPending,
+    lastTraceID,
+  }
+}
+
+export const useModifyTestScript = (
+  currentScript: string,
+  userPromptRef: Ref<string>,
+  generatedScriptRef: Ref<string>,
+  requestInfo: HoppRESTRequest
+) => {
+  const toast = useToast()
+  const t = useI18n()
+  const lastTraceID = ref<string | null>(null)
+  const isModifyTestScriptPending = ref(false)
+
+  const modifyTestScriptForPlatform =
+    platform.experiments?.aiExperiments?.modifyTestScript
+
+  const modifyTestScript = async () => {
+    isModifyTestScriptPending.value = true
+
+    if (!modifyTestScriptForPlatform) {
+      toast.error(t("ai_experiments.modify_post_request_script_error"))
+      isModifyTestScriptPending.value = false
+      return
+    }
+
+    const result = await modifyTestScriptForPlatform(
+      buildRequestInfoString(requestInfo, currentScript),
+      userPromptRef.value
+    )
+
+    if (result && E.isLeft(result)) {
+      toast.error(t("ai_experiments.modify_post_request_script_error"))
+      isModifyTestScriptPending.value = false
+      return
+    }
+
+    generatedScriptRef.value = result.right.modified_script
+    lastTraceID.value = result.right.trace_id
+
+    isModifyTestScriptPending.value = false
+    return result.right
+  }
+
+  return {
+    modifyTestScript,
+    isModifyTestScriptPending,
+    lastTraceID,
+  }
+}
+
+const buildRequestInfoString = (
+  request: HoppRESTRequest,
+  currentScript: string
+) => {
+  return `
+  METHOD:
+  ${request.method}
+
+  URL:
+  ${request.endpoint}
+
+  BODY:
+  ${JSON.stringify(request.body) ?? ""}
+
+  PARAMS:
+  ${JSON.stringify(request.params, null, 2)}
+
+  HEADERS:
+  ${JSON.stringify(request.headers, null, 2)}
+  
+  EXISTING SCRIPT:
+  ${currentScript}
+  `
+}

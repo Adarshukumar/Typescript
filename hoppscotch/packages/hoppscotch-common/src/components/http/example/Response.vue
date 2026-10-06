@@ -1,0 +1,24 @@
+<template>
+  <HttpExampleResponseMeta v-model:response="doc.response" />
+  <HttpExampleLenseBodyRenderer v-model:document="doc" :tab-id="tabId" />
+</template>
+
+<script setup lang="ts">
+import { useVModel } from "@vueuse/core"
+import {
+  HoppRequestDocument,
+  HoppSavedExampleDocument,
+} from "~/helpers/tab/document"
+
+const props = defineProps<{
+  document: HoppSavedExampleDocument
+  isEmbed: boolean
+  tabId: string
+}>()
+
+const emit = defineEmits<{
+  (e: "update:tab", val: HoppRequestDocument): void
+}>()
+
+const doc = useVModel(props, "document", emit)
+</script>

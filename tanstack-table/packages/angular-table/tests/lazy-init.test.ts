@@ -1,0 +1,225 @@
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  input,
+  runInInjectionContext,
+  signal,
+} from '@angular/core'
+import { TestBed } from '@angular/core/testing'
+import { injectLazyInit } from '../src/injectLazyInit'
+import { flushQueue, setFixtureSignalInputs } from './test-utils'
+import type { Injector, WritableSignal } from '@angular/core'
+
+describe('injectLazyInit', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+  test('should register cleanup only after initialization', () => {
+    const initializedObject = { data: signal(true) }
+    const initializer = vi.fn(() => initializedObject)
+    const cleanup = vi.fn<(object: typeof initializedObject) => void>()
+
+    @Component({ standalone: true, template: `` })
+    class Test {
+      readonly lazySignal = injectLazyInit(initializer, cleanup)
+    }
+
+    const uninitializedFixture = TestBed.createComponent(Test)
+    uninitializedFixture.destroy()
+
+    expect(initializer).not.toHaveBeenCalled()
+    expect(cleanup).not.toHaveBeenCalled()
+
+    const initializedFixture = TestBed.createComponent(Test)
+    initializedFixture.componentInstance.lazySignal.data()
+    initializedFixture.destroy()
+
+    expect(initializer).toHaveBeenCalledOnce()
+    expect(cleanup).toHaveBeenCalledOnce()
+    expect(cleanup).toHaveBeenCalledWith(initializedObject)
+  })
+
+  test('does not initialize object when view is already destroyed', async () => {
+    vi.useFakeTimers()
+    const initializedObject = { data: signal(true) }
+    const initializer = vi.fn(() => initializedObject)
+    const cleanup = vi.fn<(object: typeof initializedObject) => void>()
+    const destroyFnSpy = vi.fn<(obj: Record<string, any>) => void>()
+
+    @Component({ standalone: true, template: `` })
+    class Test {
+      readonly lazySignal = injectLazyInit(initializer, cleanup)
+
+      constructor() {
+        inject(DestroyRef).onDestroy(() => {
+          setTimeout(() => {
+            destroyFnSpy(this.lazySignal.data)
+          })
+        })
+      }
+    }
+
+    const fixture = TestBed.createComponent(Test)
+    fixture.destroy()
+
+    expect(() => vi.runAllTimers()).toThrow(
+      new Error(
+        '[@tanstack/angular-table] Cannot initialize object after view is destroyed',
+      ),
+    )
+
+    expect(initializer).not.toHaveBeenCalledOnce()
+    expect(cleanup).not.toHaveBeenCalledOnce()
+  })
+
+  test('tracks destruction when DestroyRef.destroyed is unavailable', () => {
+    const initializedObject = { data: signal(true) }
+    const initializer = vi.fn(() => initializedObject)
+    const cleanup = vi.fn<(object: typeof initializedObject) => void>()
+    const destroyCallbacks = new Set<() => void>()
+    const legacyDestroyRef = {
+      onDestroy(callback: () => void) {
+        destroyCallbacks.add(callback)
+        return () => destroyCallbacks.delete(callback)
+      },
+    }
+    const injector = {
+      get(token: unknown) {
+        if (token === DestroyRef) {
+          return legacyDestroyRef
+        }
+        throw new Error('Unexpected injection token')
+      },
+    } as Injector
+
+    const lazySignal = runInInjectionContext(injector, () =>
+      injectLazyInit(initializer, cleanup),
+    )
+    destroyCallbacks.forEach((callback) => callback())
+
+    expect(() => lazySignal.data).toThrow(
+      new Error(
+        '[@tanstack/angular-table] Cannot initialize object after view is destroyed',
+      ),
+    )
+    expect(initializer).not.toHaveBeenCalled()
+    expect(cleanup).not.toHaveBeenCalled()
+  })
+
+  test('should not initialize until accessed', () => {
+    const mockFn = vi.fn()
+
+    TestBed.runInInjectionContext(() => {
+      const proxy = injectLazyInit(() => {
+        mockFn()
+        return {
+          data: signal(true),
+        }
+      }, vi.fn())
+
+      expect(mockFn).not.toHaveBeenCalled()
+
+      TestBed.tick()
+
+      expect(mockFn).not.toHaveBeenCalled()
+
+      proxy.data()
+
+      expect(mockFn).toHaveBeenCalledOnce()
+    })
+  })
+
+  test('should init eagerly accessing manually', () => {
+    const mockFn = vi.fn()
+
+    TestBed.runInInjectionContext(() => {
+      const lazySignal = injectLazyInit(() => {
+        mockFn()
+        return {
+          data: signal(true),
+        }
+      }, vi.fn())
+
+      lazySignal.data()
+    })
+
+    expect(mockFn).toHaveBeenCalled()
+  })
+
+  test('should init lazily and only once', async () => {
+    const initCallFn = vi.fn()
+    const registerDataValue = vi.fn<(arg0: number) => void>()
+
+    let value!: { data: WritableSignal<number> }
+    const outerSignal = signal(0)
+
+    TestBed.runInInjectionContext(() => {
+      value = injectLazyInit(() => {
+        initCallFn()
+
+        void outerSignal()
+
+        return { data: signal(0) }
+      }, vi.fn())
+
+      effect(() => registerDataValue(value.data()))
+    })
+
+    value.data()
+
+    TestBed.tick()
+
+    expect(outerSignal).toBeDefined()
+
+    expect(initCallFn).toHaveBeenCalledTimes(1)
+
+    outerSignal.set(1)
+    await flushQueue()
+    outerSignal.set(2)
+    await flushQueue()
+    value.data.set(4)
+    await flushQueue()
+
+    expect(initCallFn).toHaveBeenCalledTimes(1)
+    expect(registerDataValue).toHaveBeenCalledTimes(1)
+  })
+
+  test('should support required signal input', async () => {
+    @Component({
+      standalone: true,
+      template: `{{ call() }} - {{ lazySignal.data() }}`,
+      changeDetection: ChangeDetectionStrategy.OnPush,
+    })
+    class Test {
+      readonly title = input.required<string>()
+      readonly call = signal(0)
+
+      lazySignal = injectLazyInit(() => {
+        this.call.update((value) => value + 1)
+        return {
+          data: computed(() => this.title()),
+        }
+      }, vi.fn())
+    }
+
+    const fixture = TestBed.createComponent(Test)
+    setFixtureSignalInputs(fixture, { title: 'newValue' })
+    expect(fixture.debugElement.nativeElement.textContent).toBe('1 - newValue')
+    await flushQueue()
+
+    setFixtureSignalInputs(fixture, { title: 'updatedValue' })
+    expect(fixture.debugElement.nativeElement.textContent).toBe(
+      '1 - updatedValue',
+    )
+
+    setFixtureSignalInputs(fixture, { title: 'newUpdatedValue' })
+    expect(fixture.debugElement.nativeElement.textContent).toBe(
+      '1 - newUpdatedValue',
+    )
+  })
+})

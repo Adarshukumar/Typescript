@@ -1,0 +1,128 @@
+{
+  "name": "p-map",
+  "description": "Map over promises concurrently",
+  "dist-tags": {
+    "latest": "4.0.0"
+  },
+  "versions": {
+    "4.0.0": {
+      "name": "p-map",
+      "version": "4.0.0",
+      "description": "Map over promises concurrently",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/sindresorhus/p-map.git"
+      },
+      "funding": "https://github.com/sponsors/sindresorhus",
+      "author": {
+        "name": "Sindre Sorhus",
+        "email": "sindresorhus@gmail.com",
+        "url": "https://sindresorhus.com"
+      },
+      "engines": {
+        "node": ">=10"
+      },
+      "scripts": {
+        "test": "xo && ava && tsd"
+      },
+      "dependencies": {
+        "aggregate-error": "^3.0.0"
+      },
+      "devDependencies": {
+        "ava": "^2.2.0",
+        "delay": "^4.1.0",
+        "in-range": "^2.0.0",
+        "random-int": "^2.0.0",
+        "time-span": "^3.1.0",
+        "tsd": "^0.7.4",
+        "xo": "^0.27.2"
+      },
+      "gitHead": "a4b4dec459544d98880bc53a580e53691aff9fa9",
+      "bugs": {
+        "url": "https://github.com/sindresorhus/p-map/issues"
+      },
+      "_id": "p-map@4.0.0",
+      "_nodeVersion": "10.18.1",
+      "_npmVersion": "6.14.0",
+      "dist": {
+        "integrity": "sha512-/bjOqmgETBYB5BoEeGVea8dmvHb2m9GLy1E9W43yeyfP6QQCZGFNa+XRceJEuDB6zqr+gKpIAmlLebMpykw/MQ==",
+        "shasum": "bb2f95a5eda2ec168ec9274e06a747c3e2904d2b",
+        "tarball": "http://localhost:4260/p-map/p-map-4.0.0.tgz",
+        "fileCount": 5,
+        "unpackedSize": 8687
+      },
+      "directories": {},
+      "_hasShrinkwrap": false
+    },
+    "7.0.8": {
+      "_id": "p-map@7.0.8",
+      "bugs": {
+        "url": "https://github.com/sindresorhus/p-map/issues"
+      },
+      "dist": {
+        "shasum": "e2ce27eff78cd934a78908a3cede58330a3a5543",
+        "tarball": "http://localhost:4260/p-map/p-map-7.0.8.tgz",
+        "fileCount": 5,
+        "integrity": "sha512-MitaVsCuCFIvOLLPIU7NnfrZvS9H9h7kwMUkDo+T2pEISaJD48IV9S8iIdXB7PsvvdxyYcsSTTrr90XKsbulNw==",
+        "unpackedSize": 23253
+      },
+      "name": "p-map",
+      "type": "module",
+      "types": "./index.d.ts",
+      "author": {
+        "url": "https://sindresorhus.com",
+        "name": "Sindre Sorhus",
+        "email": "sindresorhus@gmail.com"
+      },
+      "engines": {
+        "node": ">=18"
+      },
+      "exports": {
+        "types": "./index.d.ts",
+        "default": "./index.js"
+      },
+      "funding": "https://github.com/sponsors/sindresorhus",
+      "gitHead": "bc8380d3097926eb89c9dc96a94bf0d4ddc4bc03",
+      "license": "MIT",
+      "scripts": {
+        "test": "xo && ava && tsd"
+      },
+      "version": "7.0.8",
+      "repository": {
+        "url": "git+https://github.com/sindresorhus/p-map.git",
+        "type": "git"
+      },
+      "_npmVersion": "12.0.1",
+      "description": "Map over promises concurrently",
+      "directories": {},
+      "sideEffects": false,
+      "_nodeVersion": "22.23.1",
+      "_hasShrinkwrap": false,
+      "devDependencies": {
+        "xo": "^0.56.0",
+        "ava": "^5.2.0",
+        "tsd": "^0.29.0",
+        "chalk": "^5.3.0",
+        "delay": "^6.0.0",
+        "in-range": "^3.0.0",
+        "time-span": "^5.1.0",
+        "random-int": "^3.0.0"
+      }
+    }
+  },
+  "homepage": "https://github.com/sindresorhus/p-map#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sindresorhus/p-map.git"
+  },
+  "author": {
+    "name": "Sindre Sorhus",
+    "email": "sindresorhus@gmail.com",
+    "url": "https://sindresorhus.com"
+  },
+  "bugs": {
+    "url": "https://github.com/sindresorhus/p-map/issues"
+  },
+  "license": "MIT"
+}

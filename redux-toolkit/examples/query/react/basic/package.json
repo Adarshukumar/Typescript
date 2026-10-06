@@ -1,0 +1,43 @@
+{
+  "name": "@examples-query-react/basic",
+  "private": true,
+  "version": "1.0.0",
+  "description": "getting-started-basic",
+  "keywords": [],
+  "main": "src/index.tsx",
+  "dependencies": {
+    "@reduxjs/toolkit": "^1.6.0-rc.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-redux": "^9.1.2",
+    "react-scripts": "5.0.1"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/jest": "^26.0.23",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "msw": "^0.40.2",
+    "typescript": "^6.0.3"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ],
+    "rules": {
+      "react/react-in-jsx-scope": "off"
+    }
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --runInBand"
+  },
+  "browserslist": [
+    ">0.2%",
+    "not dead",
+    "not ie <= 11",
+    "not op_mini all"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "after:bump": "pnpm i && git add -u"
+  },
+  "git": {
+    "commitMessage": "Release @rtk-query/graphql-request-base-query ${version}",
+    "tagName": "@rtk-query/graphql-request-base-query@${version}"
+  },
+  "npm": {
+    "publish": false,
+    "versionArgs": ["--workspaces-update=false"]
+  }
+}

@@ -1,0 +1,30 @@
+# Dependency directories
+node_modules/
+
+# IDE related
+.idea
+
+# Test coverage
+coverage
+*.lcov
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variables file
+.env
+.env.test
+
+# build output
+.vercel
+
+# OS-specific
+.DS_Store
+
+tmp
+packages/svelte/scripts/_baseline/
+
+benchmarking/.profiles
+benchmarking/compare/.results
+benchmarking/compare/.profiles
+benchmarking/compare/results.html
